@@ -55,23 +55,64 @@ describe('scrum formations: our attacking backline', () => {
   }
 });
 
-describe('scrum formations: our defending backline', () => {
+const theirs = (layout: Layout, n: number) => {
+  const p = layout.players.find((q) => q.team === 'defence' && q.number === n);
+  if (!p) throw new Error(`defence ${n} missing`);
+  return p;
+};
+
+describe('scrum formations: their ball', () => {
   for (const row of ROWS) {
     for (const lane of LANES) {
       const label = `${row.id}-${lane.id}`;
       const layout = scrumLayout(row.id, lane.id, 'defending');
+      const scrumX = (ours(layout, 1).x + ours(layout, 3).x) / 2;
 
-      it(`${label}: every back is onside (5 m behind the hindmost foot)`, () => {
-        for (const n of [10, 11, 12, 13, 14, 15]) expect(depth(layout, n), `${n}`).toBeGreaterThanOrEqual(5);
-      });
-
-      it(`${label}: 15 is at least as deep as every other back (wingers may drop level as back-three cover)`, () => {
-        for (const n of [10, 11, 12, 13, 14]) expect(depth(layout, 15), `${n}`).toBeGreaterThanOrEqual(depth(layout, n));
-        // At our own 5 m the board edge (the dead-ball area) is the limit on how deep 15 can be drawn.
+      it(`${label}: our backs are onside and flat, 15 deep`, () => {
+        for (const n of [10, 11, 12, 13, 14]) expect(depth(layout, n), `${n}`).toBeGreaterThanOrEqual(5);
+        for (const n of [10, 12, 13, 14]) expect(depth(layout, n), `${n} flat`).toBeLessThan(7);
         const room = (BOARD_H - PLAYER_R - ours(layout, 8).y) / PX_PER_M_Y;
         expect(depth(layout, 15)).toBeGreaterThanOrEqual(Math.min(12, room));
       });
+
+      it(`${label}: our 10, 12, 13 and 14 stand opposite theirs`, () => {
+        for (const n of [10, 12, 13]) expect(Math.abs(ours(layout, n).x - theirs(layout, n).x) / PX_PER_M_X, `${n}`).toBeLessThan(1);
+        expect(Math.abs(ours(layout, 14).x - theirs(layout, 14).x) / PX_PER_M_X).toBeLessThan(2);
+      });
+
+      it(`${label}: their backs form the attacking ladder, upfield of their 8`, () => {
+        const up = (n: number) => (theirs(layout, 8).y - theirs(layout, n).y) / PX_PER_M_Y;
+        for (const n of [10, 11, 12, 13, 14, 15]) expect(up(n), `${n}`).toBeGreaterThanOrEqual(5);
+        // At our opposition 5 m their backs are on their own try line, so the board edge flattens the ladder.
+        expect(up(12)).toBeGreaterThanOrEqual(up(10));
+        expect(up(13)).toBeGreaterThanOrEqual(up(12));
+        expect(up(15)).toBeGreaterThanOrEqual(up(13));
+      });
+
+      it(`${label}: our 11 holds the blind when it is wide enough, else sits inside 10`, () => {
+        const open = Math.sign(ours(layout, 10).x - scrumX);
+        const blindWidth = (open > 0 ? scrumX - 10 : BOARD_W - 10 - scrumX) / PX_PER_M_X;
+        const elevenSide = Math.sign(ours(layout, 11).x - scrumX);
+        if (blindWidth >= 12) {
+          expect(elevenSide, 'on the blind').toBe(-open);
+        } else {
+          expect(elevenSide, 'inside 10').toBe(open);
+          expect(Math.abs(ours(layout, 11).x - scrumX)).toBeLessThan(Math.abs(ours(layout, 10).x - scrumX));
+        }
+      });
     }
+  }
+});
+
+describe('scrum formations: our ball, their defence', () => {
+  for (const lane of LANES) {
+    it(`halfway-${lane.id}: their 10, 12, 13 line up opposite ours, flat and onside`, () => {
+      const layout = scrumLayout('halfway', lane.id, 'attacking');
+      for (const n of [10, 12, 13]) {
+        expect(Math.abs(ours(layout, n).x - theirs(layout, n).x) / PX_PER_M_X, `${n}`).toBeLessThan(1);
+        expect((theirs(layout, 8).y - theirs(layout, n).y) / PX_PER_M_Y, `${n} onside`).toBeGreaterThanOrEqual(5);
+      }
+    });
   }
 });
 
@@ -79,9 +120,11 @@ describe('lineout formations: throwing team', () => {
   for (const row of ROWS) {
     for (const side of SIDES) {
       for (const size of LINEOUT_SIZES) {
-        it(`${row.id}-${side.id}-${size}: 10 is behind the 10 m line`, () => {
+        it(`${row.id}-${side.id}-${size}: 10 is behind the 10 m line and 11 is inside 10`, () => {
           const layout = lineoutLayout(row.id, side.id, 'attacking', size);
           expect((ours(layout, 10).y - layout.ball.y) / PX_PER_M_Y).toBeGreaterThanOrEqual(10);
+          const touchX = side.id === 'left' ? 10 : BOARD_W - 10;
+          expect(Math.abs(ours(layout, 11).x - touchX)).toBeLessThan(Math.abs(ours(layout, 10).x - touchX));
         });
       }
     }

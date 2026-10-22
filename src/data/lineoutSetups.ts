@@ -22,12 +22,13 @@ export const SIDES: Array<{ id: SideId; label: string; shortLabel: string; x: nu
 /** Order forwards join the line: 1, 4, 5, 6, 3, 7, 8 (hooker throws, 9 receives). */
 const LINE_ORDER = [1, 4, 5, 6, 3, 7, 8];
 /** Backs' x measured from the throwing touchline (mirrored for the right side). */
-const BACK_X: Record<number, number> = { 10: 330, 11: 435, 12: 480, 13: 630, 14: 960, 15: 760 };
+/** 11 stands in the 15 m channel behind the tail of the lineout, inside 10, not out with 14. */
+const BACK_X: Record<number, number> = { 10: 330, 11: 200, 12: 480, 13: 630, 14: 960, 15: 760 };
 /** Depth below the line of touch for the throwing team's backs. */
 /** 10 sits at 118 px (10.3 m) rather than the site's 110 px, which is inside the 10 m offside line. */
-const THROW_DEPTH: Record<number, number> = { 10: 118, 11: 180, 12: 150, 13: 200, 14: 140, 15: 220 };
+const THROW_DEPTH: Record<number, number> = { 10: 118, 11: 165, 12: 150, 13: 200, 14: 140, 15: 220 };
 /** Depth above the line of touch for the defending team's backs (negative = upfield). */
-const DEFEND_DEPTH: Record<number, number> = { 10: -120, 11: -120, 12: -100, 13: -100, 14: -170, 15: -220 };
+const DEFEND_DEPTH: Record<number, number> = { 10: -120, 11: -150, 12: -100, 13: -100, 14: -170, 15: -220 };
 
 function teamTuples(team: Team, role: 'throwing' | 'defending', side: SideId, y: number, size: number): PlayerTuple[] {
   const throwing = role === 'throwing';
