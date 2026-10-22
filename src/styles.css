@@ -77,6 +77,18 @@ p {
   font-size: 22px;
 }
 
+.masthead__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.masthead__crest {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+
 .eyebrow {
   display: block;
   font-size: 11px;
@@ -375,6 +387,11 @@ p {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.hint--inline {
+  padding: 0;
+  width: 100%;
 }
 
 .muted {
@@ -789,6 +806,10 @@ ol.list {
   .masthead h1 {
     font-size: 18px;
   }
+  .masthead__crest {
+    width: 40px;
+    height: 40px;
+  }
   .tabs--top {
     display: none;
   }
@@ -937,6 +958,12 @@ ol.list {
   40% { transform: translateX(6px); }
   60% { transform: translateX(-4px); }
   80% { transform: translateX(4px); }
+}
+
+.gate__crest {
+  width: 88px;
+  height: 88px;
+  margin-bottom: 6px;
 }
 
 .gate__title {

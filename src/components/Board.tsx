@@ -22,6 +22,12 @@ export interface SpacingLink {
   label: string;
 }
 
+export interface Marker {
+  x: number;
+  y: number;
+  label: string;
+}
+
 interface Props {
   view: BoardView;
   players: PlayerPos[];
@@ -30,6 +36,8 @@ interface Props {
   routes?: Route[];
   offsideLines?: OffsideLine[];
   spacing?: SpacingLink[];
+  /** Points of interest drawn as a dashed gold ring with a label (e.g. the seam a play attacks). */
+  markers?: Marker[];
   highlightIds?: string[];
   ringIds?: string[];
   /** Small badge next to a token, keyed by player id (e.g. a role such as "SWEEP"). */
@@ -53,6 +61,7 @@ export function Board({
   routes = [],
   offsideLines = [],
   spacing = [],
+  markers = [],
   highlightIds = [],
   ringIds = [],
   badges = {},
@@ -154,6 +163,18 @@ export function Board({
             </g>
           );
         })}
+
+        {markers.map((mk, i) => (
+          <g key={`mk${i}`} transform={`translate(${mk.x} ${mk.y})`} pointerEvents="none">
+            <circle r={tokenR + 4} fill="rgba(253,230,138,0.18)" stroke="#fde68a" strokeWidth={2} strokeDasharray="4 4" />
+            <g transform={upright}>
+              <rect x={-(mk.label.length * 5.2 + 8) / 2} y={tokenR + 7} width={mk.label.length * 5.2 + 8} height={14} rx={7} fill="#fde68a" />
+              <text y={tokenR + 17} textAnchor="middle" fontSize={8.5} fontWeight={800} fill="#1f2937" letterSpacing={0.4}>
+                {mk.label}
+              </text>
+            </g>
+          </g>
+        ))}
 
         {routes.map((r) => (
           <polyline

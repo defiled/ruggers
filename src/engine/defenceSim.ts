@@ -1,7 +1,7 @@
 import type { LaneId, Layout, OpenSide, PlayerPos, Point } from '../board/types';
 import { BOARD_W, PLAYER_R, PX_PER_M_X, PX_PER_M_Y, clamp } from '../board/constants';
 import type { Alignment, DefenceSystemId } from '../data/defenceSystems';
-import { phaseGeometry, phaseLayout, type PhaseGeometry } from '../data/phaseFormation';
+import { acrossScale, phaseGeometry, phaseLayout, type PhaseGeometry } from '../data/phaseFormation';
 import type { Keyframe, PlayVariant } from '../data/plays';
 import { buildPlay, type BuiltPlay } from './animate';
 
@@ -38,6 +38,7 @@ const WIDE: PlayVariant = {
   id: 'wide',
   label: 'Ball to the edge',
   strike: 14,
+  seam: [],
   passes: [
     { from: 9, to: 10, t0: 0.3, t1: 0.7 },
     { from: 10, to: 12, t0: 1.2, t1: 1.6 },
@@ -64,6 +65,7 @@ const STRIKE_12: PlayVariant = {
   id: 'strike12',
   label: 'Straight runner into the seam',
   strike: 12,
+  seam: [],
   passes: [
     { from: 9, to: 10, t0: 0.3, t1: 0.7 },
     { from: 10, to: 12, t0: 1.4, t1: 1.8 },
@@ -113,7 +115,7 @@ export function buildScenario(system: DefenceSystemId, lane: LaneId, openSide: O
   }
   const layout: Layout = { ...base, players };
   const variant = system === 'dogleg' ? STRIKE_12 : WIDE;
-  return { system, layout, built: buildPlay(layout, variant, dir), dir, geometry, alignment };
+  return { system, layout, built: buildPlay(layout, variant, dir, acrossScale(geometry)), dir, geometry, alignment };
 }
 
 export interface DefenceFrame {

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DefenceMode, LaneId, OpenSide, PlayerPos, PodMode } from '../board/types';
 import { LANES } from '../data/scrumSetups';
-import { defaultOpenSide, phaseLayout } from '../data/phaseFormation';
+import { acrossScale, defaultOpenSide, phaseGeometry, phaseLayout } from '../data/phaseFormation';
 import { PLAYS, PLAY_DURATION } from '../data/plays';
-import { ballAt, buildPlay, defenceAt, positionAt, targetDefender } from '../engine/animate';
+import { ballAt, buildPlay, defenceAt, positionAt, seamFor } from '../engine/animate';
 import { useFeedbackContext } from '../feedback/context';
 import { MOBILE_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePlayback } from '../hooks/usePlayback';
@@ -17,10 +17,10 @@ export function PlaysTab() {
   const [variantIdx, setVariantIdx] = useState(0);
   const [lane, setLane] = useState<LaneId>('left15');
   const [openSideOverride, setOpenSideOverride] = useState<OpenSide | null>(null);
-  const [podMode, setPodMode] = useState<PodMode>('pods');
-  const [defenceMode, setDefenceMode] = useState<DefenceMode>('drift');
+  const [podMode, setPodMode] = useState<PodMode>('hidden');
+  const [defenceMode, setDefenceMode] = useState<DefenceMode>('static');
   const [showRoutes, setShowRoutes] = useState(true);
-  const [showTarget, setShowTarget] = useState(true);
+  const [showSeam, setShowSeam] = useState(true);
   const playback = usePlayback(PLAY_DURATION);
 
   const play = PLAYS.find((p) => p.id === playId) ?? PLAYS[0];
@@ -32,7 +32,7 @@ export function PlaysTab() {
     () => phaseLayout({ lane, row: 'halfway', openSide, podMode, defenceMode }),
     [lane, openSide, podMode, defenceMode],
   );
-  const built = useMemo(() => buildPlay(layout, variant, dir), [layout, variant, dir]);
+  const built = useMemo(() => buildPlay(layout, variant, dir, acrossScale(phaseGeometry(lane, 'halfway', openSide))), [layout, variant, dir, lane, openSide]);
 
   const t = playback.time;
   const attackers: PlayerPos[] = useMemo(
@@ -45,7 +45,7 @@ export function PlaysTab() {
   const attackerPoints = useMemo(() => Object.fromEntries(attackers.map((p) => [p.id, { x: p.x, y: p.y }])), [attackers]);
   const ball = useMemo(() => ballAt(built, attackerPoints, t), [built, attackerPoints, t]);
   const defence = useMemo(() => defenceAt(layout, defenceMode, dir, t, ball.pos, attackers), [layout, defenceMode, dir, t, ball.pos, attackers]);
-  const target = useMemo(() => (showTarget ? targetDefender(built, defence) : null), [built, defence, showTarget]);
+  const seam = useMemo(() => (showSeam ? seamFor(built) : null), [built, showSeam]);
 
   const routes: Route[] = useMemo(() => {
     if (!showRoutes) return [];
@@ -139,6 +139,7 @@ export function PlaysTab() {
           playback.restart();
         }}
         options={[
+          { value: 'static', label: 'Straight up' },
           { value: 'drift', label: 'Drift' },
           { value: 'rush', label: 'Rush' },
           { value: 'hold', label: 'Hold' },
@@ -146,8 +147,9 @@ export function PlaysTab() {
       />
       <div className="toolbar__toggles">
         <Toggle label="Running lines" checked={showRoutes} onChange={setShowRoutes} />
-        <Toggle label="Target defender" checked={showTarget} onChange={setShowTarget} />
+        <Toggle label="Show seam" checked={showSeam} onChange={setShowSeam} />
       </div>
+      <p className="hint hint--inline">Straight up is the Rugby Slate picture: each defender marks his man and comes forward. Drift and Hold slide out once the ball has passed; Rush comes up fast. Backs only takes both sets of forwards off.</p>
     </div>
   );
 
@@ -171,7 +173,8 @@ export function PlaysTab() {
             ballInFlight={ball.inFlight}
             routes={routes}
             highlightIds={carrierId ? [carrierId] : []}
-            ringIds={target ? [target] : []}
+            ringIds={seam ? seam.ids : []}
+            markers={seam ? [{ x: seam.point.x, y: seam.point.y, label: 'SEAM' }] : []}
             showReadouts={!mobile}
             portrait={mobile}
           />
@@ -215,6 +218,13 @@ export function PlaysTab() {
       <aside className="layout__side">
         <Panel eyebrow={play.tag} title={play.name}>
           <p className="lead">{play.summary}</p>
+          <p className="muted">
+            Rugby Slate calls this{' '}
+            <a className="link" href={play.reference.url} target="_blank" rel="noreferrer">
+              {play.reference.name}
+            </a>
+            .
+          </p>
           <h3>What we are trying to do</h3>
           <p>{play.intent}</p>
           <h3>Sequence &amp; timing</h3>
@@ -229,6 +239,8 @@ export function PlaysTab() {
           <p>{play.fallback}</p>
           <h3>Theory</h3>
           <p>{play.theory}</p>
+          <h3>Versus the Rugby Slate picture</h3>
+          <p>{play.slateDiff}</p>
         </Panel>
       </aside>
     </div>

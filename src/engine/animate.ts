@@ -19,11 +19,11 @@ export interface BuiltPlay {
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-function toAbs(start: Point, ruck: Point, dir: 1 | -1, kf: Keyframe): AbsFrame {
+function toAbs(start: Point, ruck: Point, dir: 1 | -1, k: number, kf: Keyframe): AbsFrame {
   if ('rx' in kf) {
-    return { t: kf.t, x: ruck.x + dir * kf.rx * PX_PER_M_X, y: ruck.y - kf.ry * PX_PER_M_Y };
+    return { t: kf.t, x: ruck.x + dir * kf.rx * k * PX_PER_M_X, y: ruck.y - kf.ry * PX_PER_M_Y };
   }
-  return { t: kf.t, x: start.x + dir * kf.dx * PX_PER_M_X, y: start.y - kf.dy * PX_PER_M_Y };
+  return { t: kf.t, x: start.x + dir * kf.dx * k * PX_PER_M_X, y: start.y - kf.dy * PX_PER_M_Y };
 }
 
 /** Forwards creep forward a few metres over the play so the picture stays alive. */
@@ -32,12 +32,16 @@ const FORWARD_DRIFT: Keyframe[] = [
   { t: PLAY_DURATION, dx: 0, dy: 4 },
 ];
 
-export function buildPlay(layout: Layout, variant: PlayVariant, dir: 1 | -1): BuiltPlay {
+/**
+ * @param acrossScale lateral compression of the alignment (phaseFormation.acrossScale); lateral route
+ * offsets are compressed by the same factor so runners still finish in the seams of a narrow shape.
+ */
+export function buildPlay(layout: Layout, variant: PlayVariant, dir: 1 | -1, acrossScale = 1): BuiltPlay {
   const routes: Record<string, AbsFrame[]> = {};
   for (const p of layout.players) {
     if (p.team !== 'attack') continue;
     const kfs = variant.routes[p.number] ?? (BACKS.includes(p.number) ? variant.routes[10] : FORWARD_DRIFT);
-    const abs = kfs.map((k) => toAbs(p, layout.ball, dir, k));
+    const abs = kfs.map((kf) => toAbs(p, layout.ball, dir, acrossScale, kf));
     routes[p.id] = abs.map((f) => ({ ...f, ...clampPlayer(f) }));
   }
   return { routes, variant, layout, dir };
@@ -80,13 +84,18 @@ export function ballAt(built: BuiltPlay, attackers: Record<string, Point>, t: nu
   return { pos: { x: c.x + 4, y: c.y - 4 }, carrier, inFlight: false };
 }
 
-export const LINE_SPEED: Record<DefenceMode, number> = { rush: 2.0, drift: 1.2, hold: 0.6 }; // m/s upfield
-const DRIFT_SPEED: Record<DefenceMode, number> = { rush: 0.5, drift: 1.6, hold: 0.3 }; // m/s lateral
+export const LINE_SPEED: Record<DefenceMode, number> = { static: 1.0, rush: 2.0, drift: 1.0, hold: 0.6 }; // m/s upfield
+/** Fraction of the ball's lateral travel past a defender that he slides out with it (0 = no drift). */
+const SLIDE: Record<DefenceMode, number> = { static: 0, rush: 0.1, drift: 0.5, hold: 0.2 };
+/** Fraction of his opposite man's lateral movement a defender copies: Rugby Slate's lines shadow the man, late. */
+const TRACK = 0.4;
 
 /**
- * Scripted defence: the front line advances at a mode-dependent line speed and slides
- * toward the open side; the backfield tracks the ball. Defenders stop a metre short of
- * the ball line so they never run through the carrier.
+ * Scripted defence, drawn the way Rugby Slate draws it: every front-line defender marks his
+ * opposite man and comes straight up at him, shadowing a fraction of his lateral movement.
+ * A straight runner therefore holds his defender; a runner who drifts drags his. In Drift / Hold
+ * the line also slides out once the ball has gone past. The front line stops short of any
+ * attacker in its channel so it never runs through the carrier; 9 and 15 cover from behind.
  */
 export function defenceAt(
   layout: Layout,
@@ -94,16 +103,18 @@ export function defenceAt(
   dir: 1 | -1,
   t: number,
   ball: Point,
-  attackers: Point[] = [],
+  attackers: Array<Point & { number?: number }> = [],
 ): PlayerPos[] {
   const ruck = layout.ball;
   const out: PlayerPos[] = [];
+  const startOf = (n: number) => layout.players.find((p) => p.team === 'attack' && p.number === n);
+  const nowOf = (n: number) => attackers.find((a) => a.number === n);
   // Nearest attacker in a defender's channel: defenders advance until they meet him, not through him.
   const channelCap = (x: number, y: number) => {
     // Never beyond the ruck line + 2 m either: the line advances, it does not chase the ball wide.
     let cap = Math.min(ball.y - 1.5 * PX_PER_M_Y, ruck.y + 2 * PX_PER_M_Y);
     for (const a of attackers) {
-      if (Math.abs(a.x - x) < 2.2 * PX_PER_M_X && a.y > y) cap = Math.min(cap, a.y - 1.6 * PX_PER_M_Y);
+      if (Math.abs(a.x - x) < 2.2 * PX_PER_M_X && a.y > y) cap = Math.min(cap, a.y - 1.8 * PX_PER_M_Y);
     }
     return cap;
   };
@@ -114,12 +125,19 @@ export function defenceAt(
     let y = d.y;
     if (!isBackfield) {
       const guard = Math.abs(d.x - ruck.x) < 3 * PX_PER_M_X;
+      // Man marking: backs shadow their opposite number, forwards hold their channel.
+      const mark = BACKS.includes(d.number) ? nowOf(d.number) : undefined;
+      const mark0 = mark ? startOf(d.number) : undefined;
+      if (mark && mark0) x += (mark.x - mark0.x) * TRACK;
+      // Slide out once the ball is past him (a real drift), never before.
+      const past = (ball.x - d.x) * dir - 2 * PX_PER_M_X;
+      if (!guard && past > 0) x += dir * SLIDE[mode] * past;
       const advance = Math.min(LINE_SPEED[mode] * t, 9) * PX_PER_M_Y;
-      if (!guard) x = d.x + dir * DRIFT_SPEED[mode] * t * PX_PER_M_X;
       y = Math.min(d.y + advance, channelCap(x, d.y));
     } else if (d.number === 9) {
-      x = lerp(d.x, ball.x, Math.min(1, t / 4));
-      y = d.y + Math.min(t * 0.6, 3) * PX_PER_M_Y;
+      // Sweeper: tracks the ball from behind the line and stays there.
+      x = lerp(d.x, ball.x, Math.min(1, t / 6));
+      y = d.y + Math.min(t * 0.3, 1) * PX_PER_M_Y;
     } else {
       x = lerp(d.x, (d.x + ball.x) / 2, Math.min(1, t / 5));
       y = d.y + Math.min(t * 0.4, 2) * PX_PER_M_Y;
@@ -129,21 +147,29 @@ export function defenceAt(
   return out;
 }
 
-/** The front-line defender closest to where the strike runner finishes. */
-export function targetDefender(built: BuiltPlay, defence: PlayerPos[]): string | null {
-  const strike = built.routes[`attack-${built.variant.strike}`];
-  if (!strike) return null;
-  const pass = built.variant.passes.find((p) => p.to === built.variant.strike);
-  const at = positionAt(strike, pass ? pass.t1 + 0.4 : 2.5);
-  let best: PlayerPos | null = null;
-  let bestD = Infinity;
-  for (const d of defence) {
-    if (d.number === 15 || d.number === 9) continue;
-    const dist = Math.hypot(d.x - at.x, (d.y - at.y) * 0.4);
-    if (dist < bestD) {
-      bestD = dist;
-      best = d;
-    }
-  }
-  return best?.id ?? null;
+export interface Seam {
+  /** Defender ids that bound the seam (one id when the target is "where he started"). */
+  ids: string[];
+  /** Where the strike runner should finish: the gap at the defenders' starting positions. */
+  point: Point;
+  label: string;
+}
+
+/**
+ * The seam a variant attacks, taken from the defenders' STARTING positions: a crash ball finishes
+ * between their 10 and 12; a switch finishes where their 10 stood before he was dragged across.
+ */
+export function seamFor(built: BuiltPlay): Seam | null {
+  const nums = built.variant.seam;
+  if (!nums || nums.length === 0) return null;
+  const starts = nums
+    .map((n) => built.layout.players.find((p) => p.team === 'defence' && p.number === n))
+    .filter((p): p is PlayerPos => Boolean(p));
+  if (starts.length === 0) return null;
+  const point = {
+    x: starts.reduce((s, p) => s + p.x, 0) / starts.length,
+    y: starts.reduce((s, p) => s + p.y, 0) / starts.length,
+  };
+  const label = starts.length === 1 ? `where their ${starts[0].number} started` : `between their ${nums.join(' and ')}`;
+  return { ids: starts.map((p) => p.id), point, label };
 }

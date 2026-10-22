@@ -23,5 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 
-# Feedback database
-data/
+# Feedback database (project root only; src/data is source)
+/data/

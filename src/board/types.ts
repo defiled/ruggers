@@ -32,5 +32,5 @@ export type RowId = 'top5' | 'top22' | 'top10' | 'halfway' | 'bottom10' | 'botto
 export type SideId = 'left' | 'right';
 
 export type PodMode = 'pods' | 'tight' | 'hidden';
-export type DefenceMode = 'drift' | 'rush' | 'hold';
+export type DefenceMode = 'static' | 'drift' | 'rush' | 'hold';
 export type OpenSide = 'left' | 'right';
