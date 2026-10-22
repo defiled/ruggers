@@ -39,3 +39,14 @@ the ball into the same seam from behind. Their eight forwards were always on the
 
 Defence tab forwards toggle and pendulum rebuild; copy rewrite; branding (in progress in a
 separate session).
+
+## Addendum: scrum and lineout possession (same day)
+
+The site's "defensive" scrum presets only move the 9s, so Their ball never changed either
+backline, and our backs kept the attacking spacing pushed to 5.5 m deep (11 out at 45-58 m on
+several rows). Both backlines are now generated from possession in `scrumBackline.withBacklines`:
+the attacking side gets the ladder, the defending side stands opposite their men 5.5 m behind
+the hindmost foot, 15 at 13 m deep behind the 13/14 channel, 11 on the blind when it is 12 m or
+wider and otherwise 4 m inside 10 and 2.5 m deeper. Rugby Slate's scrum moves draw the near
+winger on the 15 m line about 10 m back from a 5 m scrum, which is where our attacking 11
+already stood. Lineout 11 moves from 28 m to 12 m from touch, behind the tail, inside 10.
