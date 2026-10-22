@@ -87,8 +87,13 @@ export function ballAt(built: BuiltPlay, attackers: Record<string, Point>, t: nu
 export const LINE_SPEED: Record<DefenceMode, number> = { static: 1.0, rush: 2.0, drift: 1.0, hold: 0.6 }; // m/s upfield
 /** Fraction of the ball's lateral travel past a defender that he slides out with it (0 = no drift). */
 const SLIDE: Record<DefenceMode, number> = { static: 0, rush: 0.1, drift: 0.5, hold: 0.2 };
-/** Fraction of his opposite man's lateral movement a defender copies: Rugby Slate's lines shadow the man, late. */
-const TRACK = 0.4;
+/**
+ * Man marking the way Rugby Slate draws it: a defender copies most of his man's lateral movement,
+ * but what he sees is where the man was TRACK_LAG seconds ago. A 10 who drifts for two seconds
+ * drags his marker with him; a late cut at pace is barely followed.
+ */
+const TRACK = 0.7;
+export const TRACK_LAG = 0.6;
 
 /**
  * Scripted defence, drawn the way Rugby Slate draws it: every front-line defender marks his
@@ -104,11 +109,13 @@ export function defenceAt(
   t: number,
   ball: Point,
   attackers: Array<Point & { number?: number }> = [],
+  /** The attackers TRACK_LAG seconds ago (what the defenders are reacting to); defaults to now. */
+  lagged: Array<Point & { number?: number }> = attackers,
 ): PlayerPos[] {
   const ruck = layout.ball;
   const out: PlayerPos[] = [];
   const startOf = (n: number) => layout.players.find((p) => p.team === 'attack' && p.number === n);
-  const nowOf = (n: number) => attackers.find((a) => a.number === n);
+  const seenOf = (n: number) => lagged.find((a) => a.number === n);
   // Nearest attacker in a defender's channel: defenders advance until they meet him, not through him.
   const channelCap = (x: number, y: number) => {
     // Never beyond the ruck line + 2 m either: the line advances, it does not chase the ball wide.
@@ -126,7 +133,7 @@ export function defenceAt(
     if (!isBackfield) {
       const guard = Math.abs(d.x - ruck.x) < 3 * PX_PER_M_X;
       // Man marking: backs shadow their opposite number, forwards hold their channel.
-      const mark = BACKS.includes(d.number) ? nowOf(d.number) : undefined;
+      const mark = BACKS.includes(d.number) ? seenOf(d.number) : undefined;
       const mark0 = mark ? startOf(d.number) : undefined;
       if (mark && mark0) x += (mark.x - mark0.x) * TRACK;
       // Slide out once the ball is past him (a real drift), never before.

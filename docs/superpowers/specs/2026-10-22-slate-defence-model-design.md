@@ -23,8 +23,9 @@ the ball into the same seam from behind. Their eight forwards were always on the
 
 ## Decision
 
-- `defenceAt`: every front-line back marks his opposite number and copies 40% of his lateral
-  movement; forwards hold their channel. Drift / Hold / Rush add a slide only once the ball is
+- `defenceAt`: every front-line back marks his opposite number and copies 70% of his lateral
+  movement as it was 0.6 s ago, so a 10 who drifts for two seconds drags his marker but a late
+  cut at pace is barely followed (Slate's Rangy vs Crash 12); forwards hold their channel. Drift / Hold / Rush add a slide only once the ball is
   past the defender, proportional to how far past it is (50% / 20% / 10%). Line speed: Straight
   up 1.0 m/s, Drift 1.0, Rush 2.0, Hold 0.6. Their 9 tracks the ball from behind the line and
   comes up at most 1 m.

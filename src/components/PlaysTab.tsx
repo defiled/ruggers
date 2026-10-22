@@ -3,7 +3,7 @@ import type { DefenceMode, LaneId, OpenSide, PlayerPos, PodMode } from '../board
 import { LANES } from '../data/scrumSetups';
 import { acrossScale, defaultOpenSide, phaseGeometry, phaseLayout } from '../data/phaseFormation';
 import { PLAYS, PLAY_DURATION } from '../data/plays';
-import { ballAt, buildPlay, defenceAt, positionAt, seamFor } from '../engine/animate';
+import { TRACK_LAG, ballAt, buildPlay, defenceAt, positionAt, seamFor } from '../engine/animate';
 import { useFeedbackContext } from '../feedback/context';
 import { MOBILE_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePlayback } from '../hooks/usePlayback';
@@ -44,7 +44,14 @@ export function PlaysTab() {
   );
   const attackerPoints = useMemo(() => Object.fromEntries(attackers.map((p) => [p.id, { x: p.x, y: p.y }])), [attackers]);
   const ball = useMemo(() => ballAt(built, attackerPoints, t), [built, attackerPoints, t]);
-  const defence = useMemo(() => defenceAt(layout, defenceMode, dir, t, ball.pos, attackers), [layout, defenceMode, dir, t, ball.pos, attackers]);
+  const lagged: PlayerPos[] = useMemo(
+    () =>
+      layout.players
+        .filter((p) => p.team === 'attack')
+        .map((p) => ({ ...p, ...positionAt(built.routes[p.id], Math.max(0, t - TRACK_LAG)) })),
+    [layout, built, t],
+  );
+  const defence = useMemo(() => defenceAt(layout, defenceMode, dir, t, ball.pos, attackers, lagged), [layout, defenceMode, dir, t, ball.pos, attackers, lagged]);
   const seam = useMemo(() => (showSeam ? seamFor(built) : null), [built, showSeam]);
 
   const routes: Route[] = useMemo(() => {

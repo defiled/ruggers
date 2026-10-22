@@ -4,7 +4,7 @@ import type { DefenceMode, LaneId, OpenSide } from '../board/types';
 import { acrossScale, defaultOpenSide, phaseGeometry, phaseLayout } from '../data/phaseFormation';
 import { LANES } from '../data/scrumSetups';
 import { PLAYS, PLAY_DURATION } from '../data/plays';
-import { ballAt, buildPlay, defenceAt, positionAt, seamFor } from './animate';
+import { TRACK_LAG, ballAt, buildPlay, defenceAt, positionAt, seamFor } from './animate';
 
 /**
  * Every play, in every lane and both directions, must obey the coaching principles:
@@ -58,7 +58,7 @@ describe('man marking', () => {
     const their10 = layout.players.find((p) => p.team === 'defence' && p.number === 10)!;
     const moved = [{ ...our10, x: our10.x + 5 * PX_PER_M_X }];
     const after = defenceAt(layout, 'static', 1, 1, layout.ball, moved).find((d) => d.number === 10)!;
-    expect((after.x - their10.x) / PX_PER_M_X).toBeCloseTo(2, 1);
+    expect((after.x - their10.x) / PX_PER_M_X).toBeCloseTo(3.5, 1);
   });
 
   it('a straight runner holds his defender in his lane', () => {
@@ -90,7 +90,7 @@ describe('play library', () => {
                 // y grows toward our own try line, so "behind" means to.y >= from.y
                 expect(to.y, `${label}: ${pass.from}→${pass.to} is forward`).toBeGreaterThanOrEqual(from.y - 0.5 * PX_PER_M_Y);
                 const ball = ballAt(built, Object.fromEntries(at.map((p) => [p.id, p])), pass.t1);
-                const defence = defenceAt(layout, mode, dir, pass.t1, ball.pos, at);
+                const defence = defenceAt(layout, mode, dir, pass.t1, ball.pos, at, attackersAt(layout, built, Math.max(0, pass.t1 - TRACK_LAG)));
                 const nearest = defence
                   .filter((d) => d.number !== 15 && d.number !== 9 && Math.abs(d.x - to.x) < 6 * PX_PER_M_X)
                   .reduce((best, d) => Math.max(best, d.y), -Infinity);
