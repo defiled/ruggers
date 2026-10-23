@@ -7,27 +7,24 @@ import { PHASE_LABELS, defaultOpenSide, phaseGeometry, phaseLayout } from '../da
 import { downloadJson, fromSiteExport, toSiteExport } from '../engine/exportFormat';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useFeedbackContext } from '../feedback/context';
-import { MOBILE_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useBoardOrientation } from '../hooks/useBoardOrientation';
 import { Board, type OffsideLine, type SpacingLink } from './Board';
-import { Disclosure, Panel, Segmented, Toggle } from './controls';
+import { Disclosure, OrientationToggle, Panel, Segmented, Toggle } from './controls';
 
 type SetPiece = 'scrum' | 'lineout' | 'phase';
 
 type Edits = Record<string, { players?: Record<string, Point>; ball?: Point }>;
 
 const SCRUM_NOTES: Record<LaneId, string> = {
-  left5:
-    'Site preset. With only 5 m of blind, 11 tucks inside 10 as an extra first-phase runner and 15 sits deeper off 13. All six backs are on the open side.',
-  left15:
-    'Site preset. 11 holds the 15 m blind beside 9 as a genuine blind-side threat; 10-12-13 stagger across the open side with 15 behind 12.',
-  centre:
-    'Site preset. The centres split: 12 plays left of the scrum and 13 right, with 10 straight behind No. 8 and 15 deep in the middle so the attack can go either way off 9.',
-  right15: 'Site preset, mirror image of Left 15m: 11 holds the blind on the right, the backline stacks to the left.',
-  right5: 'Site preset, mirror image of Left 5m: 11 tucks inside and the whole backline is set to the left.',
+  left5: 'Only 5 m of blind, so nobody stands out there: 11 sits inside and behind 10 as the extra runner (Rugby Slate draws him on the 15 m line, 10 m back). All six backs are on the open side.',
+  left15: '11 holds the 15 m blind as a genuine threat; 10-12-13 stagger across the open side with 15 behind the 13/14 channel.',
+  centre: 'Open side is the right. 11 holds the left blind, the rest of the backline ladders to the right with 15 deep.',
+  right15: 'Mirror of Left 15m: 11 holds the blind on the right, the backline stacks to the left.',
+  right5: 'Mirror of Left 5m: 11 tucks inside 10 and the whole backline is set to the left.',
 };
 
 export function FormationsTab() {
-  const mobile = useMediaQuery(MOBILE_QUERY);
+  const { mobile, portrait, orientation, setOrientation } = useBoardOrientation();
   const [setPiece, setSetPiece] = useState<SetPiece>('scrum');
   const [row, setRow] = useState<RowId>('halfway');
   const [lane, setLane] = useState<LaneId>('left15');
@@ -125,7 +122,7 @@ export function FormationsTab() {
         : setPiece === 'lineout'
           ? `Lineout ${row} ${side} ${size}-man (${possession})`
           : `Phase ${lane} ${PHASE_LABELS[podMode]}`;
-    downloadJson(`${key.replace(/[:]/g, '-')}.json`, toSiteExport(name, 'Exported from Steamrollers Playbook', [layout]));
+    downloadJson(`${key.replace(/[:]/g, '-')}.json`, toSiteExport(name, 'Exported from Frederick RFC Playbook', [layout]));
   };
 
   const importJson = (file: File) => {
@@ -211,12 +208,12 @@ export function FormationsTab() {
             ]}
           />
           <Segmented
-            label={mobile ? 'Open side (left = top)' : 'Open side'}
+            label={portrait ? 'Open side (left = top)' : 'Open side'}
             value={openSide}
             onChange={setOpenSideOverride}
             options={[
-              { value: 'left', label: mobile ? '↑ Left' : '← Left' },
-              { value: 'right', label: mobile ? '↓ Right' : 'Right →' },
+              { value: 'left', label: portrait ? '↑ Left' : '← Left' },
+              { value: 'right', label: portrait ? '↓ Right' : 'Right →' },
             ]}
           />
           <Segmented
@@ -268,6 +265,7 @@ export function FormationsTab() {
       <div className="layout__main">
         {primaryControls}
 
+        {mobile && <OrientationToggle value={orientation} onChange={setOrientation} />}
         <div className="board-wrap">
           <Board
             view={layout.boardView}
@@ -279,7 +277,7 @@ export function FormationsTab() {
             onMove={movePlayer}
             onMoveBall={moveBall}
             showReadouts={!mobile}
-            portrait={mobile}
+            portrait={portrait}
           />
         </div>
 
@@ -293,17 +291,17 @@ export function FormationsTab() {
       <aside className="layout__side">
         <Panel eyebrow={setPiece === 'scrum' ? 'Scrum' : setPiece === 'lineout' ? 'Lineout' : 'Phase play'} title={titleFor(setPiece, row, lane, side, possession, size, podMode)}>
           <p className="muted">
-            {attackCount} attackers · {defenceCount} defenders · {mobile ? 'attack plays left to right' : 'attack plays up the board'}
+            {attackCount} attackers · {defenceCount} defenders · {portrait ? 'attack plays left to right' : 'attack plays up the board'}
           </p>
           {setPiece === 'scrum' && <p>{SCRUM_NOTES[lane]}</p>}
           {setPiece === 'scrum' && possession === 'defending' && (
             <p>
-              Their feed. Our 9 stands off the opposition 9, backs hold 5 m behind the hindmost foot and 10 lines up on their 10. Watch 11 and 15: they are the pendulum behind the line.
+              Their feed. Our 10, 12, 13 and 14 stand opposite their men in a flat line 5.5 m behind the hindmost foot; 15 sits deep behind the 13/14 channel; 11 covers the blind, or sits inside 10 when the blind is only 5 m.
             </p>
           )}
           {setPiece === 'lineout' && (
             <p>
-              Site generator: 2 throws, {size} in the line 35 px apart from 90 px in, spare forwards 10 m back, 9 at receiver. Backs 10 m back from the line of touch, 15 deepest. On their throw our line stands 10 m back and the backs mark up man-for-man.
+              Site generator: 2 throws, {size} in the line 35 px apart from 90 px in, spare forwards 10 m back, 9 at receiver. Backs 10 m back from the line of touch, 11 in the 15 m channel inside 10, 15 deepest. On their throw our line stands 10 m back and the backs mark up man-for-man.
             </p>
           )}
           {setPiece === 'phase' && geometry && (

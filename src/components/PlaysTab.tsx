@@ -5,14 +5,14 @@ import { acrossScale, defaultOpenSide, phaseGeometry, phaseLayout } from '../dat
 import { PLAYS, PLAY_DURATION } from '../data/plays';
 import { TRACK_LAG, ballAt, buildPlay, defenceAt, positionAt, seamFor } from '../engine/animate';
 import { useFeedbackContext } from '../feedback/context';
-import { MOBILE_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useBoardOrientation } from '../hooks/useBoardOrientation';
 import { usePlayback } from '../hooks/usePlayback';
 import { Board, type Route } from './Board';
 import { BoardOverlay } from './BoardOverlay';
-import { Disclosure, Panel, Segmented, Toggle } from './controls';
+import { Disclosure, OrientationToggle, Panel, Segmented, Toggle } from './controls';
 
 export function PlaysTab() {
-  const mobile = useMediaQuery(MOBILE_QUERY);
+  const { mobile, portrait, orientation, setOrientation } = useBoardOrientation();
   const [playId, setPlayId] = useState(PLAYS[0].id);
   const [variantIdx, setVariantIdx] = useState(0);
   const [lane, setLane] = useState<LaneId>('left15');
@@ -120,15 +120,15 @@ export function PlaysTab() {
         options={LANES.map((l) => ({ value: l.id, label: l.shortLabel, title: l.label }))}
       />
       <Segmented
-        label={mobile ? 'Attack toward (left = top)' : 'Attack toward'}
+        label={portrait ? 'Attack toward (left = top)' : 'Attack toward'}
         value={openSide}
         onChange={(v) => {
           setOpenSideOverride(v);
           playback.restart();
         }}
         options={[
-          { value: 'left', label: mobile ? '↑ Left' : '← Left' },
-          { value: 'right', label: mobile ? '↓ Right' : 'Right →' },
+          { value: 'left', label: portrait ? '↑ Left' : '← Left' },
+          { value: 'right', label: portrait ? '↓ Right' : 'Right →' },
         ]}
       />
       <Segmented
@@ -175,6 +175,7 @@ export function PlaysTab() {
           ))}
         </div>
 
+        {mobile && <OrientationToggle value={orientation} onChange={setOrientation} />}
         <div className="board-wrap board-wrap--video">
           <Board
             view={layout.boardView}
@@ -186,7 +187,7 @@ export function PlaysTab() {
             ringIds={seam ? seam.ids : []}
             markers={seam ? [{ x: seam.point.x, y: seam.point.y, label: 'SEAM' }] : []}
             showReadouts={!mobile}
-            portrait={mobile}
+            portrait={portrait}
           />
           <BoardOverlay
             playing={playback.playing}
