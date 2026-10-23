@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { PassEvent } from '../data/plays';
+import { IconPause, IconPlay, IconRestart } from './icons';
 
 interface Props {
   playing: boolean;
@@ -27,15 +28,17 @@ export function BoardOverlay({ playing, time, duration, speed, passes, onToggle,
     return () => clearTimeout(id);
   }, [playing]);
 
+  const glyph = (size: number) => (playing ? <IconPause size={size} /> : ended ? <IconRestart size={size} /> : <IconPlay size={size} />);
+
   return (
     <div className={`overlay${playing ? ' is-playing' : ''}`}>
       <button type="button" className="overlay__tap" onClick={onToggle} aria-label={playing ? 'Pause' : 'Play'} />
       <div className={`overlay__big${(playing && !flash) || (!playing && time > 0 && !ended) ? ' is-hidden' : ''}`} aria-hidden="true">
-        <span className="overlay__glyph">{playing ? '❚❚' : ended ? '↺' : '▶'}</span>
+        {glyph(28)}
       </div>
       <div className="overlay__bar" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="overlay__btn" onClick={onToggle} aria-label={playing ? 'Pause' : 'Play'}>
-          {playing ? '❚❚' : ended ? '↺' : '▶'}
+          {glyph(16)}
         </button>
         <div className="overlay__track">
           <input
@@ -46,6 +49,7 @@ export function BoardOverlay({ playing, time, duration, speed, passes, onToggle,
             value={Math.round(time * 100)}
             onChange={(e) => onSeek(Number(e.target.value) / 100)}
             aria-label="Scrub"
+            style={{ '--progress': `${(Math.min(time, duration) / duration) * 100}%` } as CSSProperties}
           />
           <div className="overlay__ticks" aria-hidden="true">
             {passes.map((p, i) => (
@@ -62,7 +66,8 @@ export function BoardOverlay({ playing, time, duration, speed, passes, onToggle,
           </div>
         </div>
         <span className="overlay__time">
-          {time.toFixed(1)}<span className="overlay__dim">/{duration.toFixed(0)}s</span>
+          {time.toFixed(1)}
+          <span className="overlay__dim">/{duration.toFixed(0)}s</span>
         </span>
         <button
           type="button"
@@ -73,7 +78,7 @@ export function BoardOverlay({ playing, time, duration, speed, passes, onToggle,
           {speed === 0.5 ? '½×' : `${speed}×`}
         </button>
         <button type="button" className="overlay__btn overlay__btn--text" onClick={onRestart} aria-label="Restart">
-          ↺
+          <IconRestart size={15} />
         </button>
       </div>
     </div>

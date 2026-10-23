@@ -8,7 +8,7 @@ export const PLAYER_R = 12;
 export const BALL_R = 6;
 
 export const TEAM_STYLE: Record<Team, { label: string; fill: string; stroke: string; text: string }> = {
-  attack: { label: 'Steamrollers', fill: '#22c55e', stroke: '#f0fdf4', text: '#04210f' },
+  attack: { label: 'Frederick', fill: '#22c55e', stroke: '#f0fdf4', text: '#04210f' },
   defence: { label: 'Opposition', fill: '#f1f5f9', stroke: '#0c1d3f', text: '#0c1d3f' },
 };
 

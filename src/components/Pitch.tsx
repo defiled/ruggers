@@ -18,12 +18,12 @@ export function Pitch({ view, portrait = false, showLabels = true }: Props) {
       {Array.from({ length: 7 }).map((_, i) => (
         <rect key={i} x={0} y={i * 100} width={BOARD_W} height={100} fill={i % 2 ? 'var(--grass-alt)' : 'transparent'} />
       ))}
-      <rect x={10} y={-10} width={1080} height={BOARD_H + 20} fill="none" stroke="var(--line)" strokeWidth={3} />
+      <rect x={10} y={-10} width={1080} height={BOARD_H + 20} fill="none" stroke="var(--line-pitch)" strokeWidth={3} />
       {lines.solid.map((y) => (
-        <line key={`s${y}`} x1={10} y1={y} x2={1090} y2={y} stroke="var(--line)" strokeWidth={3} />
+        <line key={`s${y}`} x1={10} y1={y} x2={1090} y2={y} stroke="var(--line-pitch)" strokeWidth={3} />
       ))}
       {lines.dashed.map((y) => (
-        <line key={`d${y}`} x1={70} y1={y} x2={1030} y2={y} stroke="var(--line)" strokeWidth={3} strokeDasharray="60 120" />
+        <line key={`d${y}`} x1={70} y1={y} x2={1030} y2={y} stroke="var(--line-pitch)" strokeWidth={3} strokeDasharray="60 120" />
       ))}
       {lines.vertical.slice(1, -1).map((x) => (
         <line
@@ -32,7 +32,7 @@ export function Pitch({ view, portrait = false, showLabels = true }: Props) {
           y1={0}
           x2={x}
           y2={BOARD_H}
-          stroke="var(--line)"
+          stroke="var(--line-pitch)"
           strokeWidth={x === 550 ? 0 : 2}
           strokeDasharray="14 22"
           opacity={0.5}
@@ -51,9 +51,9 @@ export function Pitch({ view, portrait = false, showLabels = true }: Props) {
               x={x}
               y={y}
               transform={up(x, y)}
-              fill="var(--line)"
+              fill="var(--line-pitch)"
               fontSize={portrait ? 15 : 13}
-              fontWeight={700}
+              fontWeight={500}
               opacity={0.75}
               textAnchor={portrait ? (nearTop ? 'end' : 'start') : 'start'}
             >
@@ -66,18 +66,18 @@ export function Pitch({ view, portrait = false, showLabels = true }: Props) {
           const text = x === 100 || x === 1000 ? '5m' : '15m';
           const y = portrait ? 40 : BOARD_H - 8;
           return (
-            <text key={`m${x}`} x={x} y={y} transform={up(x, y)} fill="var(--line)" fontSize={11} opacity={0.6} textAnchor="middle">
+            <text key={`m${x}`} x={x} y={y} transform={up(x, y)} fill="var(--line-pitch)" fontSize={11} opacity={0.6} textAnchor="middle">
               {text}
             </text>
           );
         })}
       {showLabels &&
         (portrait ? (
-          <text x={60} y={BOARD_H - 14} transform={`rotate(-90 60 ${BOARD_H - 14})`} fill="var(--line)" fontSize={13} fontWeight={700} opacity={0.7} textAnchor="start">
+          <text x={60} y={BOARD_H - 14} transform={`rotate(-90 60 ${BOARD_H - 14})`} fill="var(--line-pitch)" fontSize={13} fontWeight={500} opacity={0.7} textAnchor="start">
             ATTACK →
           </text>
         ) : (
-          <text x={BOARD_W - 22} y={BOARD_H / 2} fill="var(--line)" fontSize={12} opacity={0.6} textAnchor="middle" transform={`rotate(-90 ${BOARD_W - 22} ${BOARD_H / 2})`}>
+          <text x={BOARD_W - 22} y={BOARD_H / 2} fill="var(--line-pitch)" fontSize={12} opacity={0.6} textAnchor="middle" transform={`rotate(-90 ${BOARD_W - 22} ${BOARD_H / 2})`}>
             ATTACK ↑
           </text>
         ))}

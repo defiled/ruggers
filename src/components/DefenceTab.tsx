@@ -4,25 +4,27 @@ import { fmtM } from '../board/constants';
 import { ALIGNMENT_LABEL, DEFENCE_SYSTEMS, PITCH_SECTIONS, READ_THE_ATTACK, type Alignment, type DefenceSystemId } from '../data/defenceSystems';
 import { defaultOpenSide } from '../data/phaseFormation';
 import { LANES } from '../data/scrumSetups';
-import { ballAt, positionAt } from '../engine/animate';
+import { ballAt, positionAt, type BallState } from '../engine/animate';
 import { DEF_DURATION, buildScenario, defendersAt, gainLineMetres } from '../engine/defenceSim';
 import { useFeedbackContext } from '../feedback/context';
-import { MOBILE_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useBoardOrientation } from '../hooks/useBoardOrientation';
 import { usePlayback } from '../hooks/usePlayback';
 import { Board, type OffsideLine } from './Board';
 import { BoardOverlay } from './BoardOverlay';
-import { Disclosure, Panel, Segmented } from './controls';
+import { Disclosure, OrientationToggle, Panel, Segmented } from './controls';
 
 export function DefenceTab() {
-  const mobile = useMediaQuery(MOBILE_QUERY);
-  const [systemId, setSystemId] = useState<DefenceSystemId>('blitz');
+  const { mobile, portrait, orientation, setOrientation } = useBoardOrientation();
+  const [systemId, setSystemId] = useState<DefenceSystemId>(DEFENCE_SYSTEMS[0].id);
   const [alignment, setAlignment] = useState<Alignment>('deep');
   const [lane, setLane] = useState<LaneId>('left15');
   const [openSideOverride, setOpenSideOverride] = useState<OpenSide | null>(null);
   const playback = usePlayback(DEF_DURATION);
 
   const system = DEFENCE_SYSTEMS.find((s) => s.id === systemId) ?? DEFENCE_SYSTEMS[0];
-  const openSide: OpenSide = openSideOverride ?? defaultOpenSide(lane);
+  // On a 5 m lane there is only one side with room for a backline, so the direction is fixed.
+  const edgeLane = lane === 'left5' || lane === 'right5';
+  const openSide: OpenSide = (edgeLane ? null : openSideOverride) ?? defaultOpenSide(lane);
 
   const scenario = useMemo(() => buildScenario(systemId, lane, openSide, alignment), [systemId, lane, openSide, alignment]);
   const t = playback.time;
@@ -35,15 +37,21 @@ export function DefenceTab() {
     [scenario, t],
   );
   const attackerPoints = useMemo(() => Object.fromEntries(attackers.map((p) => [p.id, { x: p.x, y: p.y }])), [attackers]);
-  const ball = useMemo(() => ballAt(scenario.built, attackerPoints, t), [scenario, attackerPoints, t]);
+  const ball: BallState = useMemo(
+    () => (scenario.ballPath ? { pos: positionAt(scenario.ballPath, t), carrier: null, inFlight: false } : ballAt(scenario.built, attackerPoints, t)),
+    [scenario, attackerPoints, t],
+  );
   const frame = useMemo(() => defendersAt(scenario, t, ball.pos, attackers, ball.carrier), [scenario, t, ball, attackers]);
 
+  const ballOnly = !!scenario.ballPath; // pendulum: no carriers, so no carrier or gain-line readout
   const carrier = ball.carrier ? attackers.find((a) => a.number === ball.carrier) : null;
   const gain = carrier ? gainLineMetres(scenario, carrier) : null;
   const caption = [...system.captions].reverse().find((c) => t >= c.t) ?? system.captions[0];
   const carrierId = ball.carrier ? `attack-${ball.carrier}` : null;
 
-  const guides: OffsideLine[] = [{ team: 'neutral', y: scenario.layout.ball.y, label: 'GAIN LINE' }];
+  const guides: OffsideLine[] = ballOnly
+    ? [{ team: 'defence', y: scenario.defensiveLineY, label: 'DEFENSIVE LINE' }]
+    : [{ team: 'neutral', y: scenario.layout.ball.y, label: 'GAIN LINE' }];
 
   useFeedbackContext(`Defence · ${system.name} · ${ALIGNMENT_LABEL[alignment]} · ${lane} ${openSide}`);
 
@@ -54,19 +62,21 @@ export function DefenceTab() {
 
   const setup = (
     <div className="toolbar">
-      <Segmented
-        label="Attack alignment"
-        value={alignment}
-        onChange={(v) => {
-          setAlignment(v);
-          playback.restart();
-        }}
-        options={[
-          { value: 'deep', label: 'Deep' },
-          { value: 'standard', label: 'Standard' },
-          { value: 'flat', label: 'Flat' },
-        ]}
-      />
+      {!ballOnly && (
+        <Segmented
+          label="Attack alignment"
+          value={alignment}
+          onChange={(v) => {
+            setAlignment(v);
+            playback.restart();
+          }}
+          options={[
+            { value: 'deep', label: 'Deep' },
+            { value: 'standard', label: 'Standard' },
+            { value: 'flat', label: 'Flat' },
+          ]}
+        />
+      )}
       <Segmented
         label="Ruck position"
         value={lane}
@@ -77,18 +87,20 @@ export function DefenceTab() {
         }}
         options={LANES.map((l) => ({ value: l.id, label: l.shortLabel, title: l.label }))}
       />
-      <Segmented
-        label={mobile ? 'They attack toward (left = top)' : 'They attack toward'}
-        value={openSide}
-        onChange={(v) => {
-          setOpenSideOverride(v);
-          playback.restart();
-        }}
-        options={[
-          { value: 'left', label: mobile ? '↑ Left' : '← Left' },
-          { value: 'right', label: mobile ? '↓ Right' : 'Right →' },
-        ]}
-      />
+      {!edgeLane && (
+        <Segmented
+          label={portrait ? 'They attack toward (left = top)' : 'They attack toward'}
+          value={openSide}
+          onChange={(v) => {
+            setOpenSideOverride(v);
+            playback.restart();
+          }}
+          options={[
+            { value: 'left', label: portrait ? '↑ Left' : '← Left' },
+            { value: 'right', label: portrait ? '↓ Right' : 'Right →' },
+          ]}
+        />
+      )}
     </div>
   );
 
@@ -98,12 +110,13 @@ export function DefenceTab() {
         <div className="playlist playlist--5" role="tablist" aria-label="Defensive systems">
           {DEFENCE_SYSTEMS.map((s) => (
             <button key={s.id} type="button" role="tab" aria-selected={s.id === systemId} className={`chip${s.id === systemId ? ' is-active' : ''}`} onClick={() => select(s.id)}>
-              <b>{s.name}</b>
-              <small>{s.tag}</small>
+              <span className="chip__name">{s.name}</span>
+              <span className="chip__tag">{s.tag}</span>
             </button>
           ))}
         </div>
 
+        {mobile && <OrientationToggle value={orientation} onChange={setOrientation} />}
         <div className="board-wrap board-wrap--video">
           <Board
             view={scenario.layout.boardView}
@@ -115,7 +128,7 @@ export function DefenceTab() {
             ringIds={frame.rings}
             badges={frame.badges}
             showReadouts={!mobile}
-            portrait={mobile}
+            portrait={portrait}
           />
           <BoardOverlay
             playing={playback.playing}
@@ -132,25 +145,27 @@ export function DefenceTab() {
 
         <div className="caption">
           <p className="caption__text">{caption.text}</p>
-          <div className="caption__stats">
-            <span className="stat">
-              <span className="stat__label">Carrier</span>
-              <span className="stat__value">{carrier ? `#${carrier.number}` : ball.inFlight ? 'ball in air' : '—'}</span>
-            </span>
-            <span className="stat">
-              <span className="stat__label">Gain line</span>
-              <span className={`stat__value${gain != null && gain < 0 ? ' is-bad' : ''}`}>
-                {gain == null ? '—' : gain >= 0 ? `${fmtM(gain)} behind` : `${fmtM(-gain)} over`}
+          {!ballOnly && (
+            <div className="caption__stats">
+              <span className="stat">
+                <span className="stat__label">Carrier</span>
+                <span className="stat__value">{carrier ? `#${carrier.number}` : ball.inFlight ? 'ball in air' : '—'}</span>
               </span>
-            </span>
-            <span className="stat">
-              <span className="stat__label">Attack</span>
-              <span className="stat__value">{ALIGNMENT_LABEL[alignment]}</span>
-            </span>
-          </div>
+              <span className="stat">
+                <span className="stat__label">Gain line</span>
+                <span className={`stat__value${gain != null && gain < 0 ? ' is-bad' : ''}`}>
+                  {gain == null ? '—' : gain >= 0 ? `${fmtM(gain)} behind` : `${fmtM(-gain)} over`}
+                </span>
+              </span>
+              <span className="stat">
+                <span className="stat__label">Attack</span>
+                <span className="stat__value">{ALIGNMENT_LABEL[alignment]}</span>
+              </span>
+            </div>
+          )}
         </div>
 
-        {mobile ? <Disclosure title="Setup: attack depth, ruck, direction" open={false}>{setup}</Disclosure> : setup}
+        {mobile ? <Disclosure title={ballOnly ? 'Setup: ruck, direction' : 'Setup: attack depth, ruck, direction'} open={false}>{setup}</Disclosure> : setup}
       </div>
 
       <aside className="layout__side">

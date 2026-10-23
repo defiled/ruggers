@@ -1,18 +1,22 @@
 import type { LaneId, Layout, OpenSide, PlayerPos, Point } from '../board/types';
-import { BOARD_W, PLAYER_R, PX_PER_M_X, PX_PER_M_Y, clamp } from '../board/constants';
+import { BOARD_W, PX_PER_M_X, PX_PER_M_Y, clamp, clampPlayer } from '../board/constants';
 import type { Alignment, DefenceSystemId } from '../data/defenceSystems';
-import { acrossScale, phaseGeometry, phaseLayout, type PhaseGeometry } from '../data/phaseFormation';
+import { phaseGeometry, type PhaseGeometry } from '../data/phaseFormation';
 import type { Keyframe, PlayVariant } from '../data/plays';
-import { buildPlay, type BuiltPlay } from './animate';
+import { buildPlay, positionAt, type AbsFrame, type BuiltPlay } from './animate';
 
 /**
- * Defence scenarios: the attack moves the ball along its backline from a ruck and the
- * defence responds according to the chosen system. The attack can align deep, standard
- * or flat so the "blitz when they are deep" logic can be seen rather than read.
+ * Defence scenarios drawn the way Rugby Slate draws them: backs only, a ruck, and the ball
+ * moving along the attacking backline while the defence answers with the chosen system.
+ * Each system has its own cast and its own movement rule (see driftAt, blitzAt, shooterAt,
+ * pendulumAt). The attack can align deep, standard or flat so "blitz when they are deep,
+ * drift when they are flat and wide" can be seen rather than read.
  */
 
 export const TRIGGER = 0.3; // ball leaves 9's hands
 export const DEF_DURATION = 5;
+/** Defensive line sits this far behind the gain line (metres). */
+const LINE_DEPTH = 2.5;
 
 export interface Scenario {
   system: DefenceSystemId;
@@ -21,16 +25,32 @@ export interface Scenario {
   dir: 1 | -1;
   geometry: PhaseGeometry;
   alignment: Alignment;
+  /** Y of the defensive line at set, in board px. */
+  defensiveLineY: number;
+  /** Lateral compression of the shape when the open side is narrow (1 = full width). */
+  across: number;
+  /** Pendulum only: the ball is not carried, it glides along this path. */
+  ballPath?: AbsFrame[];
 }
 
 const mx = (m: number) => m * PX_PER_M_X;
 const my = (m: number) => m * PX_PER_M_Y;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const smooth = (u: number) => {
+  const c = clamp(u, 0, 1);
+  return c * c * (3 - 2 * c);
+};
 
 const steady = (dy: number, dx = 0): Keyframe[] => [
   { t: 0, dx: 0, dy: 0 },
   { t: 0.8, dx: 0, dy: 0.6 },
   { t: DEF_DURATION, dx, dy },
+];
+
+const NINE_ROUTE: Keyframe[] = [
+  { t: 0, dx: 0, dy: 0 },
+  { t: 1, dx: 0.5, dy: 0.8 },
+  { t: DEF_DURATION, dx: 3, dy: 4 },
 ];
 
 /** Ball moved along the backline: 9 → 10 → 12 → 13 → 14, each receiver running onto it. */
@@ -46,17 +66,11 @@ const WIDE: PlayVariant = {
     { from: 13, to: 14, t0: 3.0, t1: 3.4 },
   ],
   routes: {
-    9: [
-      { t: 0, dx: 0, dy: 0 },
-      { t: 1, dx: 0.5, dy: 0.8 },
-      { t: DEF_DURATION, dx: 3, dy: 4 },
-    ],
+    9: NINE_ROUTE,
     10: steady(5, 1.5),
     12: steady(6, 1.5),
     13: steady(6.5, 1.5),
     14: steady(7, 0.5),
-    15: steady(6, 2),
-    11: steady(5, 0.5),
   },
 };
 
@@ -71,7 +85,7 @@ const STRIKE_12: PlayVariant = {
     { from: 10, to: 12, t0: 1.4, t1: 1.8 },
   ],
   routes: {
-    9: WIDE.routes[9],
+    9: NINE_ROUTE,
     10: [
       { t: 0, dx: 0, dy: 0 },
       { t: 0.7, dx: 0, dy: 1 },
@@ -87,35 +101,103 @@ const STRIKE_12: PlayVariant = {
     ],
     13: steady(6, 1),
     14: steady(6, 0),
-    15: steady(5, 1),
-    11: steady(4, 0),
   },
 };
 
-const BACKS = new Set([10, 11, 12, 13, 14, 15]);
+/** The shooter picture: 9 hits the first receiver, who is tackled before he can move the ball on. */
+const FIRST_RECEIVER: PlayVariant = {
+  id: 'firstReceiver',
+  label: 'Ball to the first receiver',
+  strike: 10,
+  seam: [],
+  passes: [{ from: 9, to: 10, t0: 0.3, t1: 0.8 }],
+  routes: {
+    9: NINE_ROUTE,
+    10: [
+      { t: 0, dx: 0, dy: 0 },
+      { t: 0.8, dx: 0, dy: 1 },
+      { t: 1.6, dx: 0.3, dy: 3 },
+      { t: DEF_DURATION, dx: 0.3, dy: 3.3 },
+    ],
+    12: steady(4, 1),
+    13: steady(4.5, 1),
+  },
+};
+
+/** [number, metres across toward the open side, metres from the gain line (+ attack side, − defence side)]. */
+type Spot = [number, number, number];
+
+interface Cast {
+  attack: Spot[];
+  defence: Spot[];
+}
+
+/** Attacking backline staggered deep and wide, as Rugby Slate draws it: each man ~8 m wider and ~2.5 m deeper. */
+const BACKLINE: Spot[] = [
+  [9, 0.6, 1],
+  [10, 9, 8],
+  [12, 17, 10.5],
+  [13, 25, 13],
+  [14, 33, 15.5],
+];
+const inside = (n: number, across: number): Spot => [n, across - 1, -LINE_DEPTH];
+
+const CAST: Record<DefenceSystemId, Cast> = {
+  // One-man overlap: three defenders against four receivers. The slide and the touchline absorb it.
+  drift: { attack: BACKLINE, defence: [inside(10, 9), inside(12, 17), inside(13, 25)] },
+  blitz: { attack: BACKLINE, defence: [inside(10, 9), inside(12, 17), inside(13, 25), inside(14, 33)] },
+  dogleg: { attack: BACKLINE, defence: [inside(10, 9), inside(12, 17), inside(13, 25), inside(14, 33)] },
+  shooter: {
+    attack: [
+      [9, 0.6, 1],
+      [10, 9, 9],
+      [12, 17, 11],
+      [13, 25, 13],
+    ],
+    defence: [[9, 1, -6], inside(10, 9), inside(12, 17), inside(13, 25)],
+  },
+  // Back three plus the sweeper. Placed by pendulumAt from the ball, these are only the set positions.
+  pendulum: { attack: [], defence: [[9, 0, -6], [11, 0, -9], [15, 0, -16], [14, 0, -9]] },
+};
+
+const BACKS = new Set([10, 12, 13, 14]);
 
 export function buildScenario(system: DefenceSystemId, lane: LaneId, openSide: OpenSide, alignment: Alignment): Scenario {
   const dir: 1 | -1 = openSide === 'right' ? 1 : -1;
   const geometry = phaseGeometry(lane, 'halfway', openSide);
-  const base = phaseLayout({ lane, row: 'halfway', openSide, podMode: 'pods', defenceMode: 'drift' });
-  const shift = alignment === 'deep' ? my(3) : alignment === 'flat' ? -my(3) : 0;
-  const ruck = base.ball;
-  const players: PlayerPos[] = base.players.map((p) => {
-    if (p.team === 'attack' && BACKS.has(p.number)) return { ...p, y: p.y + shift };
-    return p;
-  });
+  const ruck: Point = { x: geometry.bx, y: geometry.by };
+  // Compress the shape when the open side is too narrow for a 33 m backline.
+  const k = Math.min(1, (geometry.openWidth - 4) / 36);
+  const shift = alignment === 'deep' ? 3 : alignment === 'flat' ? -3 : 0;
+  const cast = CAST[system];
+  const place = (team: 'attack' | 'defence', [number, across, depth]: Spot): PlayerPos => {
+    const deep = team === 'attack' && BACKS.has(number) ? depth + shift : depth;
+    const p = clampPlayer({ x: ruck.x + dir * mx(across) * k, y: ruck.y + my(deep) });
+    return { id: `${team}-${number}`, team, number, x: p.x, y: p.y };
+  };
+  const players = [...cast.defence.map((s) => place('defence', s)), ...cast.attack.map((s) => place('attack', s))];
+  const layout: Layout = { boardView: 'pitchMiddle', ball: ruck, players };
+  const defensiveLineY = ruck.y - my(LINE_DEPTH);
+
   if (system === 'pendulum') {
-    // Back three start deep: near winger wide on the open edge, 15 in the middle, far winger deep on the blind.
-    for (const p of players) {
-      if (p.team !== 'defence') continue;
-      if (p.number === 14) Object.assign(p, { x: clamp(ruck.x + dir * mx(geometry.openWidth - 5), PLAYER_R, BOARD_W - PLAYER_R), y: ruck.y - my(13) });
-      if (p.number === 15) Object.assign(p, { x: ruck.x + dir * mx(6), y: ruck.y - my(24) });
-      if (p.number === 11) Object.assign(p, { x: clamp(ruck.x - dir * mx(Math.max(geometry.blindWidth - 6, 2)), PLAYER_R, BOARD_W - PLAYER_R), y: ruck.y - my(17) });
-    }
+    // No carriers: the ball glides to the open edge and back across to the blind, as in Rugby Slate's picture.
+    const y = ruck.y + my(6);
+    const openEdge = ruck.x + dir * mx(geometry.openWidth - 6);
+    const blindEdge = ruck.x - dir * mx(Math.max(geometry.blindWidth - 6, 2));
+    const ballPath: AbsFrame[] = [
+      { t: 0, x: ruck.x, y },
+      { t: TRIGGER, x: ruck.x, y },
+      { t: 2.4, x: openEdge, y },
+      { t: DEF_DURATION, x: blindEdge, y },
+    ];
+    const sc: Scenario = { system, layout, built: buildPlay(layout, WIDE, dir, k), dir, geometry, alignment, defensiveLineY, across: k, ballPath };
+    // Set positions come from the ball at t = 0 so the picture is right before play starts.
+    sc.layout = { ...layout, players: pendulumAt(sc, 0, ballPath[0]).players };
+    return sc;
   }
-  const layout: Layout = { ...base, players };
-  const variant = system === 'dogleg' ? STRIKE_12 : WIDE;
-  return { system, layout, built: buildPlay(layout, variant, dir, acrossScale(geometry)), dir, geometry, alignment };
+
+  const variant = system === 'dogleg' ? STRIKE_12 : system === 'shooter' ? FIRST_RECEIVER : WIDE;
+  return { system, layout, built: buildPlay(layout, variant, dir, k), dir, geometry, alignment, defensiveLineY, across: k };
 }
 
 export interface DefenceFrame {
@@ -124,134 +206,194 @@ export interface DefenceFrame {
   rings: string[];
 }
 
-interface Motion {
-  lineSpeed: number; // m/s up the pitch
-  lateral: number; // fraction of the ball's lateral travel the line slides
-  maxAdvance: number; // m
+interface Ctx {
+  sc: Scenario;
+  t: number;
+  dt: number;
+  ball: Point;
+  attackers: PlayerPos[];
+  carrier: number | null;
+  badges: Record<string, string>;
+  rings: string[];
 }
 
-const MOTION: Record<DefenceSystemId, Motion> = {
-  blitz: { lineSpeed: 3.0, lateral: 0.15, maxAdvance: 12 },
-  drift: { lineSpeed: 1.3, lateral: 0.75, maxAdvance: 6 },
-  pendulum: { lineSpeed: 1.3, lateral: 0.7, maxAdvance: 6 },
-  shooter: { lineSpeed: 1.4, lateral: 0.55, maxAdvance: 7 },
-  dogleg: { lineSpeed: 3.0, lateral: 0.15, maxAdvance: 12 },
-};
-
-function nearestFrontDefender(front: PlayerPos[], x: number): PlayerPos | null {
-  let best: PlayerPos | null = null;
-  let bestD = Infinity;
-  for (const d of front) {
-    const dist = Math.abs(d.x - x);
-    if (dist < bestD) {
-      bestD = dist;
-      best = d;
-    }
+/** Stop a defender 1.2 m short of any attacker still in front of him in his channel, so the line never runs through the attack. */
+function channelCap(ctx: Ctx, x: number, y: number): number {
+  let cap = ctx.sc.layout.ball.y + my(10);
+  for (const a of ctx.attackers) {
+    if (a.y > y && Math.abs(a.x - x) < mx(2.2)) cap = Math.min(cap, a.y - my(1.2));
   }
-  return best;
+  return Math.max(cap, y);
+}
+
+/** Metres advanced after dt seconds at `speed` m/s, capped at `maxM`. */
+const advance = (dt: number, speed: number, maxM: number) => my(Math.min(speed * dt, maxM));
+
+/** A defender's spot on his man: the inside shoulder, one metre toward the ruck. */
+const shoulder = (ctx: Ctx, mark: PlayerPos | undefined, fallback: number) => (mark ? mark.x - ctx.sc.dir * mx(1) * ctx.sc.across : fallback);
+
+const attacker = (ctx: Ctx, n: number) => ctx.attackers.find((a) => a.number === n);
+
+function finish(d: PlayerPos, x: number, y: number): PlayerPos {
+  const p = clampPlayer({ x, y });
+  return { ...d, x: p.x, y: p.y };
 }
 
 export function defendersAt(sc: Scenario, t: number, ball: Point, attackers: PlayerPos[], carrier: number | null): DefenceFrame {
-  const { layout, dir, system, geometry } = sc;
-  const ruck = layout.ball;
-  const m = MOTION[system];
-  const dt = Math.max(0, t - TRIGGER);
-  const ballTravel = (ball.x - ruck.x) * dir; // px, positive toward the open side
-  const progress = clamp(ballTravel / mx(Math.max(geometry.openWidth - 4, 1)), 0, 1);
+  const ctx: Ctx = { sc, t, dt: Math.max(0, t - TRIGGER), ball, attackers, carrier, badges: {}, rings: [] };
+  const frame = sc.system === 'drift' ? driftAt(ctx) : sc.system === 'shooter' ? shooterAt(ctx) : sc.system === 'pendulum' ? pendulumAt(sc, t, ball) : blitzAt(ctx);
+  for (const id of Object.keys(frame.badges)) if (!frame.badges[id]) delete frame.badges[id];
+  return frame;
+}
 
-  const defence = layout.players.filter((p) => p.team === 'defence');
-  const front = defence.filter((d) => ruck.y - d.y < my(6));
-  const badges: Record<string, string> = {};
-  const rings: string[] = [];
+/** Order the ball travels along the backline; a defender's mark is one of these, and his hand-off is the next one out. */
+const RECEIVERS = [10, 12, 13, 14];
 
-  // Role picks made from the starting layout so they are stable through the animation.
-  const attack10 = attackers.find((a) => a.number === 10);
-  const start10 = layout.players.find((p) => p.team === 'attack' && p.number === 10);
-  const start12 = layout.players.find((p) => p.team === 'attack' && p.number === 12);
-  const shooter = system === 'shooter' && start10 ? nearestFrontDefender(front, start10.x) : null;
-  const late = system === 'dogleg' && start12 ? nearestFrontDefender(front, start12.x) : null;
+/**
+ * Drift, as Rugby Slate draws it: the line comes up under control, and the moment the first pass
+ * goes the whole line pushes "up and out" one man: 10's marker takes 12, 12's takes 13, 13's takes 14.
+ * Each defender then shadows his new man's inside shoulder, so spacing is kept and the overlap is
+ * absorbed with the touchline as the extra defender.
+ */
+function driftAt(ctx: Ctx): DefenceFrame {
+  const { sc, t, dt, badges, rings } = ctx;
+  const defence = sc.layout.players.filter((p) => p.team === 'defence');
+  const firstPass = sc.built.variant.passes[1]; // 10 → 12: the ball going past the first marker
+  const handOff = firstPass ? firstPass.t0 : Infinity;
+  const SLIDE_SECONDS = 1.3;
 
-  // Stop a defender 1.2 m short of any attacker in his channel so the line never runs through the attack.
-  // If an attacker in the channel has already gone past, the defender holds where he started.
-  const channelCap = (x: number, y: number) => {
-    let cap = ruck.y + my(10);
-    for (const a of attackers) {
-      if (Math.abs(a.x - x) < mx(2.2)) cap = Math.min(cap, a.y - my(1.2));
+  const players = defence.map((d) => {
+    const markIndex = RECEIVERS.indexOf(d.number);
+    const mark = attacker(ctx, RECEIVERS[markIndex]);
+    const next = attacker(ctx, RECEIVERS[Math.min(markIndex + 1, RECEIVERS.length - 1)]);
+    const inner = shoulder(ctx, mark, d.x);
+    const outer = shoulder(ctx, next, inner);
+    // Ripple from the inside out so the slide reads as a chain, not a jump.
+    const s = smooth((t - handOff - markIndex * 0.12) / SLIDE_SECONDS);
+    const x = lerp(inner, outer, s);
+    const y = Math.min(d.y + advance(dt, 1.6, 7), channelCap(ctx, x, d.y));
+    const marking = s < 0.5 ? mark : next;
+    if (marking && ctx.carrier === marking.number) badges[d.id] = 'BALL';
+    return finish(d, x, y);
+  });
+  return { players, badges, rings };
+}
+
+/**
+ * Blitz (and the dog-leg demo): every defender marks his man and rushes up flat and fast, sliding
+ * only a little with the ball. In the dog-leg the defender opposite 12 is late off the line.
+ */
+function blitzAt(ctx: Ctx): DefenceFrame {
+  const { sc, dt, ball, badges, rings } = ctx;
+  const ruck = sc.layout.ball;
+  const defence = sc.layout.players.filter((p) => p.team === 'defence');
+  const ballTravel = (ball.x - ruck.x) * sc.dir;
+  const late = sc.system === 'dogleg' ? 12 : null;
+  const onBall = ctx.carrier != null ? defence.find((d) => d.number === ctx.carrier) : null;
+
+  const players = defence.map((d) => {
+    const mark = attacker(ctx, d.number);
+    const startMark = sc.layout.players.find((p) => p.team === 'attack' && p.number === d.number);
+    let speed = 3.0;
+    if (d.number === late) {
+      speed = 0.9;
+      badges[d.id] = 'LATE';
+      rings.push(d.id);
+    } else if (onBall && d.id === onBall.id) {
+      badges[d.id] = 'BALL';
     }
-    return Math.max(cap, y);
-  };
+    // Shadow the man's lateral movement, plus a small slide with the ball.
+    const x = d.x + (mark && startMark ? (mark.x - startMark.x) * 0.7 : 0) + sc.dir * 0.15 * ballTravel;
+    const y = Math.min(d.y + advance(dt, speed, 12), channelCap(ctx, x, d.y));
+    return finish(d, x, y);
+  });
+  return { players, badges, rings };
+}
 
-  const carrierPos = carrier != null ? attackers.find((a) => a.number === carrier) : null;
-  const onBall = carrierPos ? nearestFrontDefender(front, carrierPos.x) : null;
+/**
+ * Shooter in space, as Rugby Slate draws it: the defender opposite the first receiver breaks the
+ * line early and goes straight at him; the men either side come up under control and drift
+ * slightly in to fill his channel; 9 lives behind the shooter for the snipe and the offload.
+ */
+function shooterAt(ctx: Ctx): DefenceFrame {
+  const { sc, dt, ball, badges, rings } = ctx;
+  const defence = sc.layout.players.filter((p) => p.team === 'defence');
+  const shooterStart = defence.find((d) => d.number === 10)!;
+  const target = attacker(ctx, 10);
 
-  const out: PlayerPos[] = defence.map((d) => {
-    const isFront = front.includes(d);
+  const players = defence.map((d) => {
+    if (d.number === 10) {
+      badges[d.id] = 'SHOOT';
+      rings.push(d.id);
+      if (!target) return d;
+      const vx = (target.x - d.x) / PX_PER_M_X;
+      const vy = (target.y - d.y) / PX_PER_M_Y;
+      const dist = Math.hypot(vx, vy);
+      const travel = Math.min(5.5 * dt, Math.max(dist - 1.0, 0));
+      const u = dist > 0 ? travel / dist : 0;
+      const x = d.x + mx(vx) * u;
+      const y = Math.min(d.y + my(vy) * u, channelCap(ctx, x, d.y));
+      return finish(d, x, y);
+    }
+    if (d.number === 9) {
+      badges[d.id] = 'SWEEP';
+      const x = lerp(d.x, (shooterStart.x + ball.x) / 2, smooth(dt / 1.5));
+      const y = d.y + advance(dt, 1.0, 2);
+      return finish(d, x, y);
+    }
+    // 12 and 13: up under control, drifting in toward the hole the shooter left.
+    const mark = attacker(ctx, d.number);
+    const fill = clamp((shooterStart.x - d.x) * 0.25, -mx(2), mx(2)) * smooth(dt / 1.5);
+    const x = shoulder(ctx, mark, d.x) + fill;
+    const y = Math.min(d.y + advance(dt, 1.4, 5), channelCap(ctx, x, d.y));
+    badges[d.id] = 'FILL';
+    return finish(d, x, y);
+  });
+  return { players, badges, rings };
+}
+
+/**
+ * Back-three pendulum, as Rugby Slate draws it: only 11, 15 and 14 (plus 9 sweeping) against the
+ * ball. The ball-side winger is up in the line on his touchline; 15 is across behind him; the far
+ * winger is deep toward the middle. Everything is a function of how far across the pitch the ball is.
+ */
+function pendulumAt(sc: Scenario, t: number, ball: Point): DefenceFrame {
+  const defence = sc.layout.players.filter((p) => p.team === 'defence');
+  const badges: Record<string, string> = {};
+  const lineY = sc.defensiveLineY;
+  const touchL = 10;
+  const touchR = BOARD_W - 10;
+  const u = clamp((ball.x - touchL) / (touchR - touchL), 0, 1); // 0 = left touchline, 1 = right
+  const leftWing = sc.dir === 1 ? 11 : 14; // the blind winger stands on the side the open play is not
+  const nearLine = (v: number) => lerp(lineY, lineY - my(7), smooth(v)); // v = 0 means the ball is on my touchline
+
+  // The ball 0.5 s ago, for the sweeper's lag.
+  const lagged = sc.ballPath ? positionAt(sc.ballPath, Math.max(0, t - 0.5)) : ball;
+
+  const players = defence.map((d) => {
     let x = d.x;
     let y = d.y;
-
-    if (isFront) {
-      const guard = Math.abs(d.x - ruck.x) < mx(3);
-      let speed = m.lineSpeed;
-      let lateral = m.lateral;
-      if (late && d.id === late.id) {
-        speed = 0.9;
-        badges[d.id] = 'LATE';
-        rings.push(d.id);
-      }
-      if (shooter && d.id === shooter.id) {
-        badges[d.id] = 'SHOOT';
-        rings.push(d.id);
-        const target = attack10 ?? start10!;
-        const vx = target.x - d.x;
-        const vy = target.y - d.y;
-        const dist = Math.hypot(vx / PX_PER_M_X, vy / PX_PER_M_Y);
-        const travel = Math.min(3.6 * dt, Math.max(dist - 1.0, 0));
-        const k = dist > 0 ? travel / dist : 0;
-        x = d.x + vx * k;
-        y = Math.min(d.y + vy * k, channelCap(x, d.y));
-        return { ...d, x: clamp(x, PLAYER_R, BOARD_W - PLAYER_R), y };
-      }
-      if (guard) lateral *= 0.4;
-      // Neighbours of the shooter push across to close the hole he leaves.
-      if (shooter && Math.abs(d.x - shooter.x) < mx(8) && d.id !== shooter.id) {
-        x += (shooter.x - d.x) * 0.3 * Math.min(1, dt / 1.2);
-      }
-      x += dir * lateral * ballTravel;
-      const advance = Math.min(speed * dt, m.maxAdvance) * PX_PER_M_Y;
-      y = Math.min(d.y + advance, channelCap(x, d.y));
-      if (onBall && d.id === onBall.id && !badges[d.id]) badges[d.id] = 'BALL';
+    if (d.number === leftWing) {
+      x = lerp(touchL + mx(5), touchL + mx(24), u);
+      y = nearLine(u);
+      badges[d.id] = u < 0.3 ? 'UP' : 'BACK';
+    } else if (d.number === 11 || d.number === 14) {
+      x = lerp(touchR - mx(24), touchR - mx(5), u);
+      y = nearLine(1 - u);
+      badges[d.id] = u > 0.7 ? 'UP' : 'BACK';
+    } else if (d.number === 15) {
+      x = lerp(touchL + mx(14), touchR - mx(14), u);
+      y = lineY - my(8) - my(6) * (1 - Math.abs(2 * u - 1));
+      badges[d.id] = 'ACROSS';
     } else if (d.number === 9) {
+      x = clamp(lagged.x, touchL + mx(4), touchR - mx(4));
+      y = lineY - my(3);
       badges[d.id] = 'SWEEP';
-      x = lerp(d.x, ball.x, Math.min(1, dt / 3));
-      y = Math.min(d.y + Math.min(dt * 0.5, 2) * PX_PER_M_Y, channelCap(x, d.y));
-    } else if (system === 'pendulum' && (d.number === 14 || d.number === 15 || d.number === 11)) {
-      const lineY = front.length ? front.reduce((s, f) => s + f.y, 0) / front.length + Math.min(m.lineSpeed * dt, m.maxAdvance) * PX_PER_M_Y : d.y;
-      if (d.number === 14) {
-        // Near winger comes up into the line as the ball goes open.
-        badges[d.id] = 'UP';
-        y = Math.min(lerp(d.y, lineY, clamp(progress / 0.5, 0, 1)), channelCap(x, d.y));
-      } else if (d.number === 15) {
-        // Fullback slides across behind the near winger.
-        badges[d.id] = 'ACROSS';
-        x = lerp(d.x, ruck.x + dir * mx(geometry.openWidth - 10), progress);
-        y = Math.min(d.y + my(2) * progress, channelCap(x, d.y));
-      } else {
-        // Far winger drops into the middle.
-        badges[d.id] = 'BACK';
-        x = lerp(d.x, ruck.x + dir * mx(4), progress);
-        y = d.y - my(3) * progress;
-      }
-    } else {
-      // Backfield (15, or a blind winger dropped back): track the ball from depth.
-      badges[d.id] = d.number === 15 ? 'BACK' : badges[d.id] ?? '';
-      x = lerp(d.x, (d.x + ball.x) / 2, Math.min(1, dt / 4));
-      y = d.y + Math.min(dt * 0.4, 2) * PX_PER_M_Y;
     }
-    return { ...d, x: clamp(x, PLAYER_R, BOARD_W - PLAYER_R), y };
+    const p = clampPlayer({ x, y });
+    return { ...d, x: p.x, y: p.y };
   });
-
-  for (const id of Object.keys(badges)) if (!badges[id]) delete badges[id];
-  return { players: out, badges, rings };
+  return { players, badges, rings: [] };
 }
 
 /** Metres the carrier is behind (+) or beyond (−) the gain line at the ruck. */

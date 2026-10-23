@@ -139,7 +139,7 @@ export function Board({
                 transform={portrait ? `rotate(-90 ${lx} ${ly})` : undefined}
                 fill={l.team === 'attack' ? '#bbf7d0' : l.team === 'defence' ? '#fecdd3' : '#fde68a'}
                 fontSize={11}
-                fontWeight={700}
+                fontWeight={600}
                 textAnchor={portrait ? 'start' : 'end'}
               >
                 {l.label}
@@ -156,7 +156,7 @@ export function Board({
               <line x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} stroke="#fde68a" strokeWidth={1.5} strokeDasharray="4 4" opacity={0.9} />
               <g transform={`translate(${mx} ${my}) ${upright ?? ''}`}>
                 <rect x={-17} y={-9} width={34} height={16} rx={4} fill="rgba(0,0,0,0.55)" />
-                <text y={3} fill="#fde68a" fontSize={11} fontWeight={700} textAnchor="middle">
+                <text y={3} fill="#fde68a" fontSize={11} fontWeight={600} textAnchor="middle">
                   {s.label}
                 </text>
               </g>
@@ -169,7 +169,7 @@ export function Board({
             <circle r={tokenR + 4} fill="rgba(253,230,138,0.18)" stroke="#fde68a" strokeWidth={2} strokeDasharray="4 4" />
             <g transform={upright}>
               <rect x={-(mk.label.length * 5.2 + 8) / 2} y={tokenR + 7} width={mk.label.length * 5.2 + 8} height={14} rx={7} fill="#fde68a" />
-              <text y={tokenR + 17} textAnchor="middle" fontSize={8.5} fontWeight={800} fill="#1f2937" letterSpacing={0.4}>
+              <text y={tokenR + 17} textAnchor="middle" fontSize={8.5} fontWeight={600} fill="#1f2937" letterSpacing={0.4}>
                 {mk.label}
               </text>
             </g>
@@ -212,13 +212,13 @@ export function Board({
               {hi && <circle r={tokenR + 5} fill="rgba(253,230,138,0.4)" />}
               <circle r={tokenR} fill={style.fill} stroke={style.stroke} strokeWidth={2} />
               <g transform={upright}>
-                <text y={4} textAnchor="middle" fontSize={fontSize} fontWeight={800} fill={style.text}>
+                <text y={4} textAnchor="middle" fontSize={fontSize} fontWeight={700} fill={style.text}>
                   {p.number}
                 </text>
                 {badge && (
                   <g transform={`translate(0 ${tokenR + 11})`}>
                     <rect x={-(badge.length * 5.2 + 6) / 2} y={-8} width={badge.length * 5.2 + 6} height={14} rx={7} fill="#fde68a" stroke="#1f2937" strokeWidth={1} />
-                    <text y={3} textAnchor="middle" fontSize={8.5} fontWeight={800} fill="#1f2937" letterSpacing={0.4}>
+                    <text y={3} textAnchor="middle" fontSize={8.5} fontWeight={600} fill="#1f2937" letterSpacing={0.4}>
                       {badge}
                     </text>
                   </g>
@@ -248,7 +248,7 @@ export function Board({
             }
           >
             <rect width={184} height={38} rx={6} fill="rgba(2,6,23,0.88)" stroke="rgba(255,255,255,0.2)" />
-            <text x={8} y={15} fill="#e2e8f0" fontSize={11} fontWeight={700}>
+            <text x={8} y={15} fill="#e2e8f0" fontSize={11} fontWeight={600}>
               {TEAM_STYLE[hovered.team].label} #{hovered.number}
             </text>
             <text x={8} y={30} fill="#cbd5e1" fontSize={11}>
