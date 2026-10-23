@@ -170,8 +170,8 @@ export function PlaysTab() {
         <div className="playlist" role="tablist" aria-label="Plays">
           {PLAYS.map((p) => (
             <button key={p.id} type="button" role="tab" aria-selected={p.id === playId} className={`chip${p.id === playId ? ' is-active' : ''}`} onClick={() => selectPlay(p.id)}>
-              <b>{p.name}</b>
-              <small>{p.tag}</small>
+              <span className="chip__name">{p.name}</span>
+              <span className="chip__tag">{p.tag}</span>
             </button>
           ))}
         </div>
@@ -203,20 +203,23 @@ export function PlaysTab() {
         </div>
 
         <ol className="timeline">
-          {variant.passes.map((p, i) => {
-            const done = t >= p.t1;
-            const live = activePass === p;
-            return (
-              <li key={i} className={`timeline__item${done ? ' is-done' : ''}${live ? ' is-live' : ''}`}>
-                <button type="button" onClick={() => playback.seek(p.t0)}>
-                  <span className="timeline__t">{p.t1.toFixed(1)}s</span>
-                  <span>
-                    {p.from} → {p.to}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+          {[...variant.passes.map((p) => ({ ...p, fake: false })), ...(variant.fakes ?? []).map((p) => ({ ...p, fake: true }))]
+            .sort((a, b) => a.t1 - b.t1)
+            .map((p, i) => {
+              const done = t >= p.t1;
+              const live = t >= p.t0 && t < p.t1;
+              return (
+                <li key={i} className={`timeline__item${done ? ' is-done' : ''}${live ? ' is-live' : ''}`}>
+                  <button type="button" onClick={() => playback.seek(p.t0)}>
+                    <span className="timeline__t">{p.t1.toFixed(1)}s</span>
+                    <span>
+                      {p.fake ? 'fake ' : ''}
+                      {p.from} → {p.to}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           <li className="timeline__item timeline__item--strike">
             <span className="timeline__t">strike</span>
             <span>{variant.strike}</span>

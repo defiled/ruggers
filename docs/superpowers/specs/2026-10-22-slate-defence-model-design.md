@@ -71,3 +71,9 @@ Acceptance re-run: strike runner never closer than 1.8 m to a front-line defende
 gain line across every play, variant, lane, forwards and defence mode; the only closer contacts
 are their 9 covering past the line and, in Drift only, their 13 sliding onto 15 after he has
 already released 14.
+
+Follow-up (same day): the shared 13 unders line now finishes a metre tighter, 20.5 m across
+(their 12's outside shoulder), with the cut spread over 1.0-2.6 s so every segment stays steeper
+than 1.5 : 1. Over/Under re-timed: 10 holds through the 3 Go pass window and *shows* the ball to
+13 at 1.4-1.7 s (`PlayVariant.fakes`, drawn on the timeline as "fake 10 → 13"), then gives to 12
+at 2.1 s; 12 → 15 at 3.1 s, 15 → 14 at 4.0 s, both still under 8 m.

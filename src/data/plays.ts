@@ -37,6 +37,8 @@ export interface PlayVariant {
   routes: Record<number, Keyframe[]>;
   passes: PassEvent[];
   strike: number;
+  /** Passes that are shown but not thrown (10 shaping to 13 on the fake 3 Go). Drawn on the timeline only. */
+  fakes?: PassEvent[];
   /** Defending jersey numbers that bound the seam the strike runner finishes in; one number = "where he started". */
   seam: number[];
   /** Runners whose lines are deliberately lateral (drift, loop, cut) and exempt from the steepness check. */
@@ -99,11 +101,11 @@ const TEN_STRAIGHT: Keyframe[] = [
 const THIRTEEN_UNDERS: Keyframe[] = [
   { t: 0, dx: 0, dy: 0 },
   { t: 1.0, dx: 0, dy: 0.5 },
-  { t: 1.4, dx: -1, dy: 2 },
-  { t: 1.7, dx: -1.6, dy: 3 },
-  { t: 2.6, dx: -3, dy: 8 },
-  { t: 3.2, dx: -3.5, dy: 11.5 },
-  { t: PLAY_DURATION, dx: -4.5, dy: 20 },
+  { t: 1.4, dx: -0.8, dy: 2 },
+  { t: 1.7, dx: -1.5, dy: 3.2 },
+  { t: 2.6, dx: -3.8, dy: 8 },
+  { t: 3.2, dx: -4.6, dy: 11.5 },
+  { t: PLAY_DURATION, dx: -5.5, dy: 20 },
 ];
 
 /** The Bread & Butter switch picture: 10 out at ~30°, 12 holding then cutting in behind him; the hand-off (or dummy) is at 2.0 s. */
@@ -407,11 +409,11 @@ export const PLAYS: Play[] = [
     id: 'overunder',
     name: 'Over / Under',
     tag: 'Fake 3 Go · 12 out the back',
-    summary: 'A fake 3 Go. 13 runs the exact 3 Go line as a decoy; 10 hits 12 instead. 12 holds, then plays behind 13 to 15 coming in off his depth, and 15 puts 14 away on the edge.',
+    summary: 'A fake 3 Go. 13 runs the exact 3 Go line; 10 shows him the ball, then hits 12 instead. 12 holds, then plays behind 13 to 15 coming in off his depth, and 15 puts 14 away on the edge.',
     intent:
       'After two or three 3 Go calls the defence is watching 13\'s line. Show it again, hold their 12 and 13 with it, and play around the back with short passes the team can make.',
     sequence:
-      '9 → 10 (0.5s) → 12 (1.5s). 13 runs the 3 Go unders line with full commitment and no ball. 12 runs straight at his man, holds a beat and passes behind 13 at 2.7s to 15, who has come in from 33 m to take it 7 m deep, one short pass away. 15 straightens outside their 13 and gives 14 the ball at 3.6s; 14 has come in off his touchline to keep the pass short.',
+      '9 → 10 (0.5s). 13 runs the 3 Go line with full commitment. At 1.5s 10 shapes the 3 Go pass to 13, then gives to 12 at 2.1s instead. 12 runs straight at his man, holds a beat and passes behind 13 at 3.1s to 15, who has come in from 33 m to take it 7 m deep, one short pass away. 15 straightens outside their 13 and gives 14 at 4.0s; 14 has come in off his touchline to keep the pass short.',
     read: 'Call it after 3 Go has been run two or three times. Needs their 12 and 13 to be reading 13\'s line. If they do not bite, 15 carries.',
     target: 'The seam outside their 13 once he has stepped in on the decoy; with their forwards on the edge, the gap between their 13 and their 7.',
     risk: '13 must sell the line but never block a defender. 12 has to hold depth so the ball behind 13 is backward. 15 and 14 must be moving early or they arrive late and the passes get long.',
@@ -426,44 +428,47 @@ export const PLAYS: Play[] = [
         strike: 15,
         seam: [13, 7],
         lateral: [15, 14],
+        // 10 holds through the 3 Go pass window (1.4-1.7 s), shows the ball to 13, then gives to 12.
+        fakes: [{ from: 10, to: 13, t0: 1.4, t1: 1.7 }],
         passes: [
           first9to10,
-          { from: 10, to: 12, t0: 1.2, t1: 1.5 },
-          { from: 12, to: 15, t0: 2.4, t1: 2.7 },
-          { from: 15, to: 14, t0: 3.3, t1: 3.6 },
+          { from: 10, to: 12, t0: 1.8, t1: 2.1 },
+          { from: 12, to: 15, t0: 2.8, t1: 3.1 },
+          { from: 15, to: 14, t0: 3.7, t1: 4.0 },
         ],
         routes: base({
           10: [
             { t: 0, dx: 0, dy: 0 },
             { t: 0.7, dx: 0, dy: 1 },
-            { t: 1.2, dx: 0.5, dy: 3 },
-            { t: 1.5, dx: 1, dy: 3.8 },
+            { t: 1.4, dx: 0.5, dy: 3 },
+            { t: 1.7, dx: 0.8, dy: 3.8 },
+            { t: 2.1, dx: 1.2, dy: 4.5 },
             { t: PLAY_DURATION, dx: 2, dy: 8 },
           ],
           12: [
             { t: 0, dx: 0, dy: 0 },
             { t: 0.8, dx: 0, dy: 1 },
-            { t: 1.5, dx: 0.3, dy: 3.2 },
-            { t: 2.4, dx: 0.5, dy: 5.5 },
-            { t: 2.7, dx: 0.5, dy: 6 },
+            { t: 2.1, dx: 0.3, dy: 3.5 },
+            { t: 2.8, dx: 0.5, dy: 5.5 },
+            { t: 3.1, dx: 0.5, dy: 6 },
             { t: PLAY_DURATION, dx: 1, dy: 10 },
           ],
           13: THIRTEEN_UNDERS,
           15: [
             { t: 0, dx: 0, dy: 0 },
-            { t: 0.8, dx: -0.5, dy: 1.5 },
-            { t: 1.7, dx: -2.5, dy: 5 },
-            { t: 2.4, dx: -5.5, dy: 8.5 },
-            { t: 2.7, dx: -6.5, dy: 10 },
-            { t: 3.3, dx: -5.5, dy: 13.5 },
-            { t: 3.6, dx: -5, dy: 14.5 },
+            { t: 1.0, dx: -0.5, dy: 1.5 },
+            { t: 2.0, dx: -2.5, dy: 5 },
+            { t: 2.8, dx: -5.5, dy: 8.5 },
+            { t: 3.1, dx: -6.5, dy: 10 },
+            { t: 3.7, dx: -5.5, dy: 13.5 },
+            { t: 4.0, dx: -5, dy: 14.5 },
             { t: PLAY_DURATION, dx: -4.5, dy: 22 },
           ],
           14: [
             { t: 0, dx: 0, dy: 0 },
             { t: 1, dx: -0.5, dy: 1 },
-            { t: 2.8, dx: -4.5, dy: 3.5 },
-            { t: 3.6, dx: -7, dy: 4.5 },
+            { t: 3.2, dx: -4.5, dy: 3.5 },
+            { t: 4.0, dx: -7, dy: 4.5 },
             { t: PLAY_DURATION, dx: -8, dy: 15 },
           ],
         }),
