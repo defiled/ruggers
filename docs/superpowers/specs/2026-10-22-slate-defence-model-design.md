@@ -50,3 +50,24 @@ the hindmost foot, 15 at 13 m deep behind the 13/14 channel, 11 on the blind whe
 wider and otherwise 4 m inside 10 and 2.5 m deeper. Rugby Slate's scrum moves draw the near
 winger on the 15 m line about 10 m back from a 5 m scrum, which is where our attacking 11
 already stood. Lineout 11 moves from 28 m to 12 m from touch, behind the tail, inside 10.
+
+## Addendum: Over/Under, Bread & Butter, 6 Go shapes (2026-10-23)
+
+- **Over/Under is a fake 3 Go.** 13 runs the 3 Go unders line (shared `THIRTEEN_UNDERS`) as the
+  decoy; 10 → 12 at 1.5 s; 12 holds and plays behind 13 at 2.7 s to 15, who comes in from 33 m to
+  take it 7 m deep (pass 7.4 m); 15 straightens outside their 13 and gives 14, who has come in
+  off his touchline, at 3.6 s (pass under 8 m). Reference: Rugby Slate Screen 2.
+- **Bread & Butter pop 13.** 10 and 12 run the identical switch picture as Switch 12 to 2.0 s
+  (`SWITCH_TEN`, `SWITCH_TWELVE`); 10 keeps, takes one more step and pops to 13 cutting under
+  into the 12/13 seam at 2.6 s, 5 m deep. Replaces the double switch. Reference: Dummy Switch Pop.
+- **6 Go** has two casts chosen by the board (`Play.autoVariant`): the blindside flanker runs the
+  inside ball with 11 trailing on his inside hip when forwards are on and the blind is 12 m or
+  wider; 11 runs it from the 5 m lanes or on Backs only. Both use the same `INSIDE_RUNNER` line
+  (starts 9 m across, 12 m deep, finishes in their 10's channel). References: Rugby Slate's two
+  inside-pop-to-11 moves; Rugby Coach Weekly on the blindside flanker taking the short pop off 10.
+- **Chopper** unchanged; tag now says 12 and 13 are both options.
+
+Acceptance re-run: strike runner never closer than 1.8 m to a front-line defender from catch to
+gain line across every play, variant, lane, forwards and defence mode; the only closer contacts
+are their 9 covering past the line and, in Drift only, their 13 sliding onto 15 after he has
+already released 14.

@@ -24,15 +24,18 @@ export function PlaysTab() {
   const playback = usePlayback(PLAY_DURATION);
 
   const play = PLAYS.find((p) => p.id === playId) ?? PLAYS[0];
-  const variant = play.variants[Math.min(variantIdx, play.variants.length - 1)];
   const openSide: OpenSide = openSideOverride ?? defaultOpenSide(lane);
   const dir: 1 | -1 = openSide === 'right' ? 1 : -1;
+  const geometry = phaseGeometry(lane, 'halfway', openSide);
+  // Some plays pick their runner from the board (6 Go: the flanker, or 11 from a 5 m lane / Backs only).
+  const autoId = play.autoVariant?.({ podMode, narrowBlind: geometry.narrowBlind });
+  const variant = (autoId ? play.variants.find((v) => v.id === autoId) : undefined) ?? play.variants[Math.min(variantIdx, play.variants.length - 1)];
 
   const layout = useMemo(
     () => phaseLayout({ lane, row: 'halfway', openSide, podMode, defenceMode }),
     [lane, openSide, podMode, defenceMode],
   );
-  const built = useMemo(() => buildPlay(layout, variant, dir, acrossScale(phaseGeometry(lane, 'halfway', openSide))), [layout, variant, dir, lane, openSide]);
+  const built = useMemo(() => buildPlay(layout, variant, dir, acrossScale(geometry)), [layout, variant, dir, geometry]);
 
   const t = playback.time;
   const attackers: PlayerPos[] = useMemo(
@@ -95,7 +98,8 @@ export function PlaysTab() {
 
   const setup = (
     <div className="toolbar">
-      {play.variants.length > 1 && (
+      {play.autoVariant && <p className="hint hint--inline">{variant.label}. {play.autoNote}</p>}
+      {play.variants.length > 1 && !play.autoVariant && (
         <Segmented
           label="Option"
           value={variantIdx}
@@ -246,8 +250,6 @@ export function PlaysTab() {
           <p>{play.fallback}</p>
           <h3>Theory</h3>
           <p>{play.theory}</p>
-          <h3>Versus the Rugby Slate picture</h3>
-          <p>{play.slateDiff}</p>
         </Panel>
       </aside>
     </div>

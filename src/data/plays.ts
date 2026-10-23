@@ -20,6 +20,8 @@
  *   - runners run straight unless the line is a deliberate drift or cut, and straighten after the catch.
  */
 
+import type { PodMode } from '../board/types';
+
 export type Keyframe = { t: number; dx: number; dy: number } | { t: number; rx: number; ry: number };
 
 export interface PassEvent {
@@ -56,8 +58,16 @@ export interface Play {
   fallback: string;
   theory: string;
   reference: { name: string; url: string };
-  slateDiff: string;
   variants: PlayVariant[];
+  /** When the cast depends on the board (6 Go: flanker or wing), picks the variant id from the context. */
+  autoVariant?: (ctx: AutoVariantContext) => string;
+  /** One line shown in place of the Option control when autoVariant is set. */
+  autoNote?: string;
+}
+
+export interface AutoVariantContext {
+  podMode: PodMode;
+  narrowBlind: boolean;
 }
 
 export const PLAY_DURATION = 6;
@@ -83,6 +93,62 @@ const TEN_STRAIGHT: Keyframe[] = [
   { t: 1.3, dx: 0.5, dy: 3.5 },
   { t: 1.6, dx: 0.8, dy: 4.5 },
   { t: PLAY_DURATION, dx: 1.5, dy: 9 },
+];
+
+/** The 3 Go line: 13 holds, cuts under at ~30° behind 12 and straightens into the 12/13 seam. Over/Under runs it as the decoy. */
+const THIRTEEN_UNDERS: Keyframe[] = [
+  { t: 0, dx: 0, dy: 0 },
+  { t: 1.0, dx: 0, dy: 0.5 },
+  { t: 1.4, dx: -1, dy: 2 },
+  { t: 1.7, dx: -1.6, dy: 3 },
+  { t: 2.6, dx: -3, dy: 8 },
+  { t: 3.2, dx: -3.5, dy: 11.5 },
+  { t: PLAY_DURATION, dx: -4.5, dy: 20 },
+];
+
+/** The Bread & Butter switch picture: 10 out at ~30°, 12 holding then cutting in behind him; the hand-off (or dummy) is at 2.0 s. */
+const SWITCH_TEN: Keyframe[] = [
+  { t: 0, dx: 0, dy: 0 },
+  { t: 0.7, dx: 0, dy: 1 },
+  { t: 1.2, dx: 1.2, dy: 3 },
+  { t: 1.7, dx: 3.2, dy: 5 },
+  { t: 2.0, dx: 4, dy: 5.5 },
+  { t: PLAY_DURATION, dx: 5.5, dy: 8.5 },
+];
+const SWITCH_TWELVE: Keyframe[] = [
+  { t: 0, dx: 0, dy: 0 },
+  { t: 0.8, dx: 0, dy: 0.5 },
+  { t: 1.4, dx: -0.2, dy: 2.5 },
+  { t: 1.7, dx: -0.6, dy: 4 },
+  { t: 2.0, dx: -1, dy: 5.5 },
+  { t: 2.6, dx: -3, dy: 8 },
+  { t: 3.2, dx: -4.8, dy: 10.5 },
+  { t: PLAY_DURATION, dx: -6, dy: 20 },
+];
+
+/** 6 Go: 10 shapes out with the ball to drag their 10, then pops inside behind his body at 2.3 s. */
+const INSIDE_BALL_TEN: Keyframe[] = [
+  { t: 0, dx: 0, dy: 0 },
+  { t: 0.7, dx: 0, dy: 1 },
+  { t: 1.4, dx: 0.5, dy: 3 },
+  { t: 2.0, dx: 1.5, dy: 4.5 },
+  { t: 2.3, dx: 2, dy: 5 },
+  { t: PLAY_DURATION, dx: 3, dy: 9 },
+];
+/** The inside runner (6, or 11 from a 5 m lane): starts 9 m across and 12 m deep, inside and behind 10, and straightens into their 10's channel. */
+const INSIDE_RUNNER: Keyframe[] = [
+  { t: 0, rx: 9, ry: -12 },
+  { t: 0.8, rx: 9.5, ry: -10.5 },
+  { t: 1.6, rx: 11.5, ry: -8 },
+  { t: 2.3, rx: 12.5, ry: -6 },
+  { t: 3.3, rx: 12.2, ry: 0 },
+  { t: PLAY_DURATION, rx: 12, ry: 14 },
+];
+const INSIDE_BALL_OUTSIDE: Keyframe[] = [
+  { t: 0, dx: 0, dy: 0 },
+  { t: 1, dx: 0, dy: 1 },
+  { t: 2.3, dx: 1, dy: 5 },
+  { t: PLAY_DURATION, dx: 2, dy: 14 },
 ];
 
 const base = (over: Record<number, Keyframe[]>): Record<number, Keyframe[]> => ({
@@ -117,8 +183,6 @@ export const PLAYS: Play[] = [
     theory:
       'Crash ball: a runner from depth hitting a short pass at pace commits two tacklers and gets over the gain line. Keep hips and shoulders square until the pass so no defender can drift; 12 carries in two hands to keep the offload alive.',
     reference: { name: 'Crash 1 – 12', url: 'https://rugbyslate.com/backs-moves/crash-1-12/' },
-    slateDiff:
-      'Rugby Slate draws it backs-only against a static line: 10 at ~12 m, 12 at ~15 m, the pass 6-8 m out and 12 finishing between their 10 and 12. Ours is the same shape with the forwards present and a defence that comes up; switch the defence to Static to see the Slate picture.',
     variants: [
       {
         id: 'main',
@@ -162,8 +226,6 @@ export const PLAYS: Play[] = [
     theory:
       'Unders line: a runner angling back toward the ball to attack the gap inside a defender who has been fixed by the runner in front. The decoy earns the gap; the strike runner arrives late from depth.',
     reference: { name: 'Crash 2 – 13', url: 'https://rugbyslate.com/backs-moves/crash-2-13/' },
-    slateDiff:
-      'Same lines as Rugby Slate\'s Crash 13: 10 and 12 straight, 13 cutting in about 30° then straight into the 12/13 seam. We add the forwards and a moving defence, and the pass comes from 10 (miss-12).',
     variants: [
       {
         id: 'main',
@@ -186,15 +248,7 @@ export const PLAYS: Play[] = [
             { t: 3, dx: 0, dy: 9 },
             { t: PLAY_DURATION, dx: 0.5, dy: 14 },
           ],
-          13: [
-            { t: 0, dx: 0, dy: 0 },
-            { t: 1.0, dx: 0, dy: 0.5 },
-            { t: 1.4, dx: -1, dy: 2 },
-            { t: 1.7, dx: -1.6, dy: 3 },
-            { t: 2.6, dx: -3, dy: 8 },
-            { t: 3.2, dx: -3.5, dy: 11.5 },
-            { t: PLAY_DURATION, dx: -4.5, dy: 20 },
-          ],
+          13: THIRTEEN_UNDERS,
         }),
       },
     ],
@@ -202,21 +256,19 @@ export const PLAYS: Play[] = [
   {
     id: 'bread',
     name: 'Bread & Butter',
-    tag: 'Switch · 12, option 13',
-    summary: '10 runs out across the line and switches with 12 cutting back inside behind him. 12 finishes where their 10 started. Option: dummy 12 and switch with 13 instead.',
+    tag: 'Switch · 12, pop 13',
+    summary: '10 and 12 run a switch: 10 out across the line, 12 cutting back inside behind him. Either 12 takes the ball and finishes where their 10 started, or 10 dummies, keeps going and pops to 13 cutting under into the 12/13 seam.',
     intent:
-      'Change the point of attack against a drifting defence. 10 carries toward touch to drag their 10 across, then hands off to 12 coming back against the grain into the space their 10 has left.',
+      'Drag their 10 across with the carry, then hit the space behind him (12) or the seam one man out (13). The switch is the same every time, so the defence cannot read which option is on.',
     sequence:
-      '9 → 10 (0.5s). 10 runs forward then angles out at ~30°, ball in two hands. 12 holds his depth, then cuts in behind 10. At 2.0s 10 turns his back to the defence and pops the ball on the far hip; 12 takes it 5 m deep, runs the cut at ~40° for three strides, then straightens into their 10\'s channel. Option 13: 10 dummies the 12 switch, drifts one more step and switches with 13 at 2.6s.',
-    read: 'Best when the defence is sliding hard with 10. If their 10 does not follow, keep the ball and play 12 straight instead.',
-    target: 'Where their 10 started: the channel he leaves when he follows 10 across.',
-    risk: 'Telegraphing the switch, or 10 running so flat he is tackled before the hand-off. Both runners hitting one defender is a wasted play. 12 must straighten or he runs into the folding guards.',
-    fallback: '10 keeps and straightens (dummy switch), or the option runner carries and we go again.',
+      '9 → 10 (0.5s). 10 angles out at ~30°, ball in two hands. 12 cuts in behind him at 2.0s. Switch 12: 10 hands off on the far hip and 12 straightens into their 10\'s channel. Pop 13: 10 keeps, takes one more step and pops to 13, who has held then cut under to take it 5 m deep at 2.6s and straightens between their 12 and 13.',
+    read: 'Best when the defence slides with 10. If their 10 follows him, give the switch. If their 12 bites in on the switch, pop 13 behind him.',
+    target: 'Switch 12: where their 10 started. Pop 13: the seam between their 12 and 13.',
+    risk: 'Telegraphing the switch, or 10 running so flat he is tackled before the hand-off. 12 must straighten after the cut. 13 must hold his depth until 10 has committed.',
+    fallback: '10 keeps and straightens, or 13 carries and we go again.',
     theory:
-      'Switch (scissors): the receiver takes the pass behind the carrier, running the opposite way. The carrier\'s angled run drags defenders; the ball is hidden on the far hip so the defence reads it late. The cut is sharp for a few metres, then the runner straightens so he is still going forward.',
-    reference: { name: 'Switch – 10 & 12', url: 'https://rugbyslate.com/backs-moves/switch-10-12/' },
-    slateDiff:
-      'Matches Rugby Slate\'s Switch 10 & 12: 10 out at ~25-30°, the hand-off 7 m from the line, 12 cutting back at ~45° then straight to where their 10 stood. The 13 option is our addition (a double-switch shape).',
+      'Switch (scissors): the receiver takes the pass behind the carrier, running the opposite way; the ball is hidden on the far hip. The dummy switch sells the same picture and plays the next man out.',
+    reference: { name: 'Switch – 10 & 12 / Dummy Switch Pop', url: 'https://rugbyslate.com/backs-moves/dummy-switch-pop/' },
     variants: [
       {
         id: 'opt2',
@@ -227,24 +279,8 @@ export const PLAYS: Play[] = [
         strikeSteepness: 1.5,
         passes: [first9to10, { from: 10, to: 12, t0: 1.7, t1: 2.0 }],
         routes: base({
-          10: [
-            { t: 0, dx: 0, dy: 0 },
-            { t: 0.7, dx: 0, dy: 1 },
-            { t: 1.2, dx: 1.2, dy: 3 },
-            { t: 1.7, dx: 3.2, dy: 5 },
-            { t: 2.0, dx: 4, dy: 5.5 },
-            { t: PLAY_DURATION, dx: 5.5, dy: 8.5 },
-          ],
-          12: [
-            { t: 0, dx: 0, dy: 0 },
-            { t: 0.8, dx: 0, dy: 0.5 },
-            { t: 1.4, dx: -0.2, dy: 2.5 },
-            { t: 1.7, dx: -0.6, dy: 4 },
-            { t: 2.0, dx: -1, dy: 5.5 },
-            { t: 2.6, dx: -3, dy: 8 },
-            { t: 3.2, dx: -4.8, dy: 10.5 },
-            { t: PLAY_DURATION, dx: -6, dy: 20 },
-          ],
+          10: SWITCH_TEN,
+          12: SWITCH_TWELVE,
           13: [
             { t: 0, dx: 0, dy: 0 },
             { t: 1.2, dx: 0, dy: 1 },
@@ -254,40 +290,24 @@ export const PLAYS: Play[] = [
         }),
       },
       {
-        id: 'opt3',
-        label: 'Option 13',
+        id: 'pop13',
+        label: 'Pop 13',
         strike: 13,
-        seam: [10, 12],
-        lateral: [10, 13],
-        strikeSteepness: 1.5,
+        seam: [12, 13],
+        lateral: [10, 12],
         passes: [first9to10, { from: 10, to: 13, t0: 2.3, t1: 2.6 }],
         routes: base({
-          10: [
-            { t: 0, dx: 0, dy: 0 },
-            { t: 0.7, dx: 0, dy: 1 },
-            { t: 1.2, dx: 1.2, dy: 3 },
-            { t: 1.7, dx: 3.2, dy: 4.5 },
-            { t: 2.3, dx: 5.5, dy: 5.2 },
-            { t: 2.6, dx: 6.5, dy: 5.5 },
-            { t: PLAY_DURATION, dx: 8, dy: 8.5 },
-          ],
-          12: [
-            { t: 0, dx: 0, dy: 0 },
-            { t: 0.8, dx: 0, dy: 0.5 },
-            { t: 1.4, dx: -0.2, dy: 2.5 },
-            { t: 1.7, dx: -0.6, dy: 4 },
-            { t: 2.0, dx: -1, dy: 5.5 },
-            { t: 2.6, dx: -2.5, dy: 9.5 },
-            { t: PLAY_DURATION, dx: -4, dy: 17 },
-          ],
+          // Same switch picture as above to 2.0 s; 10 keeps and takes one more step out.
+          10: [...SWITCH_TEN.slice(0, 5), { t: 2.3, dx: 4.8, dy: 6 }, { t: 2.6, dx: 5.2, dy: 6.3 }, { t: PLAY_DURATION, dx: 6.5, dy: 9 }],
+          12: SWITCH_TWELVE,
           13: [
             { t: 0, dx: 0, dy: 0 },
-            { t: 1.0, dx: -0.3, dy: 0.5 },
-            { t: 1.8, dx: -2, dy: 2.5 },
-            { t: 2.3, dx: -4.5, dy: 4.5 },
-            { t: 2.6, dx: -6, dy: 6 },
-            { t: 3.2, dx: -8, dy: 10 },
-            { t: PLAY_DURATION, dx: -9.5, dy: 19 },
+            { t: 1.0, dx: 0, dy: 0.5 },
+            { t: 1.4, dx: 0, dy: 1 },
+            { t: 2.0, dx: -1.2, dy: 3.5 },
+            { t: 2.6, dx: -3, dy: 6.5 },
+            { t: 3.4, dx: -4, dy: 11.5 },
+            { t: PLAY_DURATION, dx: -4.8, dy: 20 },
           ],
         }),
       },
@@ -296,7 +316,7 @@ export const PLAYS: Play[] = [
   {
     id: 'chopper',
     name: 'Chopper',
-    tag: 'Rangy · 13 switch, option 12',
+    tag: 'Rangy · 13 switch or 12',
     summary: '10 and 12 go forward then drift across together at ~30°, dragging their two defenders. 13 waits, then runs hard back inside behind both and takes a switch from 10, finishing where their 10 started.',
     intent:
       'Open the seam between the last forward and the defending 10. Because 10 and 12 run together and sideways, their defenders drift with them and the gap on the inside widens for a strong-running 13.',
@@ -309,8 +329,6 @@ export const PLAYS: Play[] = [
     theory:
       'Rangy: a sliding run by 10 with 12 in step, and a late run by 13 behind them. The drift creates the gap; the late, deep start means 13 is at full pace when he takes the switch, which is thrown with 10\'s back to the defence.',
     reference: { name: 'Rangy', url: 'https://rugbyslate.com/backs-moves/rangy/' },
-    slateDiff:
-      'Rugby Slate\'s Rangy: 10 and 12 drift at ~30°, the switch ~7 m from the line, 13 crossing behind both and finishing exactly where their 10 stood. Ours matches that; with the forwards present the seam sits between our Pod A\'s defenders and their 10, so 13 must stay tight to 10\'s hip.',
     variants: [
       {
         id: 'opt3',
@@ -388,27 +406,26 @@ export const PLAYS: Play[] = [
   {
     id: 'overunder',
     name: 'Over / Under',
-    tag: '13 under, 12 out the back',
-    summary: '13 runs a hard unders line in front of 12 to fix the midfield; 12 plays the ball behind him (out the back) to 15 arriving from depth into the seam outside their 13, with 14 wide as the option.',
+    tag: 'Fake 3 Go · 12 out the back',
+    summary: 'A fake 3 Go. 13 runs the exact 3 Go line as a decoy; 10 hits 12 instead. 12 holds, then plays behind 13 to 15 coming in off his depth, and 15 puts 14 away on the edge.',
     intent:
-      'Use the threat of 3 Go to hold the inside defenders, then play around the back of the decoy to a two-on-one on the edge. The defence sees the unders line it has already been hurt by and bites in.',
+      'After two or three 3 Go calls the defence is watching 13\'s line. Show it again, hold their 12 and 13 with it, and play around the back with short passes the team can make.',
     sequence:
-      '9 → 10 (0.5s) → 12 (1.5s). 13 runs his unders line across in front of 12 at full commitment. 12 runs straight, holds the ball a beat and passes behind 13 at 2.7s to 15, who has come up from depth on a near-straight line into the seam between their 13 and the first edge forward. 15 straightens through it or puts 14 away at 3.6s.',
-    read: 'Call it after 3 Go has been run. Needs the edge defender narrow or the fullback held in the backfield. If the defending 13 does not bite on the decoy, 15 carries.',
-    target: 'The seam outside their 13 once he has stepped in on the decoy. With their forwards on the edge that is the gap between their 13 and their 7; against backs only it is the gap to their 14.',
-    risk: '13 must cross in front of 12 but never block a defender. 12 must hold depth: a flat pass out the back gets intercepted. 15 has to be on the move from the start or he arrives late and static.',
-    fallback: 'If the edge is covered 15 straightens and carries, keeping 14 for the next phase or the kick return.',
+      '9 → 10 (0.5s) → 12 (1.5s). 13 runs the 3 Go unders line with full commitment and no ball. 12 runs straight at his man, holds a beat and passes behind 13 at 2.7s to 15, who has come in from 33 m to take it 7 m deep, one short pass away. 15 straightens outside their 13 and gives 14 the ball at 3.6s; 14 has come in off his touchline to keep the pass short.',
+    read: 'Call it after 3 Go has been run two or three times. Needs their 12 and 13 to be reading 13\'s line. If they do not bite, 15 carries.',
+    target: 'The seam outside their 13 once he has stepped in on the decoy; with their forwards on the edge, the gap between their 13 and their 7.',
+    risk: '13 must sell the line but never block a defender. 12 has to hold depth so the ball behind 13 is backward. 15 and 14 must be moving early or they arrive late and the passes get long.',
+    fallback: '15 straightens and carries; 14 stays for the next phase.',
     theory:
-      'Decoy and out-the-back: a hard "under" runner fixes two defenders; the ball travels "over" him, behind the decoy line, to a second-wave runner. The pass must be made with depth so the second wave arrives at pace onto a ball that is already in the air.',
-    reference: { name: 'Screen 1', url: 'https://rugbyslate.com/backs-moves/screen-1/' },
-    slateDiff:
-      'Rugby Slate\'s Screen 1 has 12 and 13 angling in as the screen and 15 running straight up between their 13 and 14 with 14 wide. Ours keeps 12 straight as the passer and uses 13 alone as the screen. With the forwards on the pitch their edge forward stands where that gap would be, so 15 aims for the seam just outside their 13 instead.',
+      'Screen: a hard decoy fixes two defenders and the ball travels behind him to a second-wave runner. Every pass stays under 8 m because the wide men come to the ball rather than the ball going to them.',
+    reference: { name: 'Screen 2', url: 'https://rugbyslate.com/backs-moves/screen-2/' },
     variants: [
       {
         id: 'main',
-        label: 'To the edge',
+        label: 'Fake 3 Go',
         strike: 15,
         seam: [13, 7],
+        lateral: [15, 14],
         passes: [
           first9to10,
           { from: 10, to: 12, t0: 1.2, t1: 1.5 },
@@ -426,34 +443,28 @@ export const PLAYS: Play[] = [
           12: [
             { t: 0, dx: 0, dy: 0 },
             { t: 0.8, dx: 0, dy: 1 },
-            { t: 1.5, dx: 0.5, dy: 3.2 },
-            { t: 2.4, dx: 1.5, dy: 5.5 },
-            { t: 2.7, dx: 2, dy: 6 },
-            { t: PLAY_DURATION, dx: 3, dy: 10 },
+            { t: 1.5, dx: 0.3, dy: 3.2 },
+            { t: 2.4, dx: 0.5, dy: 5.5 },
+            { t: 2.7, dx: 0.5, dy: 6 },
+            { t: PLAY_DURATION, dx: 1, dy: 10 },
           ],
-          13: [
-            { t: 0, dx: 0, dy: 0 },
-            { t: 1.0, dx: 0, dy: 0.5 },
-            { t: 1.7, dx: -1.5, dy: 3 },
-            { t: 2.5, dx: -3.8, dy: 7 },
-            { t: 3.3, dx: -5.5, dy: 10.5 },
-            { t: PLAY_DURATION, dx: -6.5, dy: 16 },
-          ],
+          13: THIRTEEN_UNDERS,
           15: [
             { t: 0, dx: 0, dy: 0 },
-            { t: 0.8, dx: 0, dy: 1.5 },
-            { t: 1.7, dx: -1.5, dy: 5 },
-            { t: 2.7, dx: -3, dy: 10.5 },
-            { t: 3.3, dx: -4, dy: 13 },
-            { t: 3.6, dx: -4.3, dy: 13.8 },
-            { t: PLAY_DURATION, dx: -5, dy: 21 },
+            { t: 0.8, dx: -0.5, dy: 1.5 },
+            { t: 1.7, dx: -2.5, dy: 5 },
+            { t: 2.4, dx: -5.5, dy: 8.5 },
+            { t: 2.7, dx: -6.5, dy: 10 },
+            { t: 3.3, dx: -5.5, dy: 13.5 },
+            { t: 3.6, dx: -5, dy: 14.5 },
+            { t: PLAY_DURATION, dx: -4.5, dy: 22 },
           ],
           14: [
             { t: 0, dx: 0, dy: 0 },
-            { t: 1, dx: 0, dy: 1 },
-            { t: 2.8, dx: -1, dy: 3.2 },
-            { t: 3.6, dx: -1.5, dy: 4.5 },
-            { t: PLAY_DURATION, dx: -2, dy: 15 },
+            { t: 1, dx: -0.5, dy: 1 },
+            { t: 2.8, dx: -4.5, dy: 3.5 },
+            { t: 3.6, dx: -7, dy: 4.5 },
+            { t: PLAY_DURATION, dx: -8, dy: 15 },
           ],
         }),
       },
@@ -462,58 +473,55 @@ export const PLAYS: Play[] = [
   {
     id: '6go',
     name: '6 Go',
-    tag: 'Blind winger inside ball · 11',
-    summary: '11 starts 3 m inside and 3 m behind 10. As the backline shapes to go wide he runs up on 10\'s inside and takes a hidden pop into the seam between the last forward and their 10.',
+    tag: 'Flanker inside ball · 11 from the 5 m',
+    summary: 'The inside ball off 10. The blindside flanker starts inside and behind 10, runs up on his inside shoulder as the backline shapes wide, and takes a hidden pop into the seam between the last forward and their 10. 11 trails him for the offload. From a 5 m lane there is no blind to hold, so 11 runs the line himself.',
     intent:
-      'Punish a defence that drifts with the backline. 11 arrives late and unmarked into the channel between the folding guards and the defending 10, who has turned his shoulders out to follow 10.',
+      'Punish a defence that drifts with the backline. The runner arrives late and unmarked into the channel between the folding guards and their 10, who has turned his shoulders out to follow ours.',
     sequence:
-      '9 → 10 (0.5s). 11 goes on the call, runs up behind 10 and arrives a metre inside and two metres behind him at 2.3s. 10 shapes out with the ball in two hands, drags their 10, and pops the inside ball behind his own body. 11 straightens through the seam at ~3s. 12 and 13 run straight as the out-the-back option.',
+      '9 → 10 (0.5s). The runner (6, or 11 from the 5 m) goes on the call, runs up behind 10 and arrives a metre inside and two metres behind him at 2.3s. 10 shapes out with the ball in two hands, drags their 10, and pops the inside ball behind his own body. The runner straightens through the seam at ~3s. With 6 carrying, 11 comes in to sit on his inside hip for the offload. 12 and 13 run straight as the out-the-back option.',
     read: 'Works when the guards are slow to fold and their 10 has started to drift with ours. Watch the defending 9: if he is sweeping the blind the channel is empty.',
     target: 'The seam between the last defending forward and their 10, opened when their 10 follows ours out.',
-    risk: 'If the guards are set and square it is a congested carry. 11 must not arrive early and stand still, or the defence reads it. The pop must be hidden behind 10\'s body.',
-    fallback: '10 holds and plays 12 as normal; 11 becomes a cleaner at the next ruck.',
+    risk: 'If the guards are set and square it is a congested carry. The runner must not arrive early and stand still. The pop must be hidden behind 10\'s body.',
+    fallback: '10 holds and plays 12 as normal; the runner becomes a cleaner at the next ruck.',
     theory:
-      'Inside pop to the winger: the winger roams as an "inside fullback", starting close to 9 and 10 so he can reach the inside channel in time. The pop pass is made behind the carrier\'s back so no defender sees it; the runner needs to be close to the carrier when he takes it.',
+      'The blindside flanker is the forward who takes the short pop or inside pass off the first receiver in phase play. From a scrum or ruck on the 5 m line he is bound or on the edge, so the blind winger, with nothing to hold out wide, tucks in beside 9 and runs it (Rugby Slate\'s inside-pop-to-11 moves).',
     reference: { name: 'Dummy Switch 1 – Pop Inside to 11', url: 'https://rugbyslate.com/backs-moves/dummy-switch-1-pop-inside-to-11/' },
-    slateDiff:
-      'Both of Rugby Slate\'s inside-pop-to-11 moves start 11 tucked in beside 9, deeper than 10, and finish him in their 10\'s channel. Ours does the same without the dummy switch with 12; against our 1-3-3-1 the seam is between the defender on Pod A and their 10.',
+    autoVariant: ({ podMode, narrowBlind }) => (podMode === 'hidden' || narrowBlind ? 'wing' : 'flanker'),
+    autoNote: '6 runs it with forwards on and a blind for 11 to hold. From the 5 m lanes, or on Backs only, 11 runs it.',
     variants: [
       {
-        id: 'main',
-        label: 'Inside ball to 11',
+        id: 'flanker',
+        label: '6 off 10',
+        strike: 6,
+        seam: [5, 10],
+        lateral: [10, 6, 11],
+        passes: [first9to10, { from: 10, to: 6, t0: 2.0, t1: 2.3 }],
+        routes: base({
+          10: INSIDE_BALL_TEN,
+          6: INSIDE_RUNNER,
+          11: [
+            { t: 0, rx: 4, ry: -14 },
+            { t: 1.0, rx: 4.5, ry: -12.5 },
+            { t: 2.3, rx: 8, ry: -8 },
+            { t: 3.3, rx: 10.5, ry: -3 },
+            { t: PLAY_DURATION, rx: 11, ry: 10 },
+          ],
+          12: INSIDE_BALL_OUTSIDE,
+          13: INSIDE_BALL_OUTSIDE,
+        }),
+      },
+      {
+        id: 'wing',
+        label: '11 off 10',
         strike: 11,
         seam: [5, 10],
         lateral: [10, 11],
         passes: [first9to10, { from: 10, to: 11, t0: 2.0, t1: 2.3 }],
         routes: base({
-          10: [
-            { t: 0, dx: 0, dy: 0 },
-            { t: 0.7, dx: 0, dy: 1 },
-            { t: 1.4, dx: 0.5, dy: 3 },
-            { t: 2.0, dx: 1.5, dy: 4.5 },
-            { t: 2.3, dx: 2, dy: 5 },
-            { t: PLAY_DURATION, dx: 3, dy: 9 },
-          ],
-          11: [
-            { t: 0, rx: 9, ry: -12 },
-            { t: 0.8, rx: 9.5, ry: -10.5 },
-            { t: 1.6, rx: 11.5, ry: -8 },
-            { t: 2.3, rx: 12.5, ry: -6 },
-            { t: 3.3, rx: 12.2, ry: 0 },
-            { t: PLAY_DURATION, rx: 12, ry: 14 },
-          ],
-          12: [
-            { t: 0, dx: 0, dy: 0 },
-            { t: 1, dx: 0, dy: 1 },
-            { t: 2.3, dx: 1, dy: 5 },
-            { t: PLAY_DURATION, dx: 2, dy: 14 },
-          ],
-          13: [
-            { t: 0, dx: 0, dy: 0 },
-            { t: 1, dx: 0, dy: 1 },
-            { t: 2.3, dx: 1, dy: 5 },
-            { t: PLAY_DURATION, dx: 2, dy: 14 },
-          ],
+          10: INSIDE_BALL_TEN,
+          11: INSIDE_RUNNER,
+          12: INSIDE_BALL_OUTSIDE,
+          13: INSIDE_BALL_OUTSIDE,
         }),
       },
     ],

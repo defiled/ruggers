@@ -164,6 +164,61 @@ describe('play library', () => {
     }
   }
 
+  it('Over / Under: the decoy 13 runs the 3 Go line into the 12/13 seam', () => {
+    const over = PLAYS.find((p) => p.id === 'overunder')!;
+    const three = PLAYS.find((p) => p.id === '3go')!;
+    expect(over.variants[0].routes[13]).toBe(three.variants[0].routes[13]);
+    const layout = phaseLayout({ lane: 'left15', row: 'halfway', openSide: 'right', podMode: 'pods', defenceMode: 'static' });
+    const built = buildPlay(layout, over.variants[0], 1, acrossScale(phaseGeometry('left15', 'halfway', 'right')));
+    const frames = built.routes['attack-13'];
+    let crossing: { x: number; y: number } | null = null;
+    for (let t = 0; t <= PLAY_DURATION; t += 0.05) {
+      const p = positionAt(frames, t);
+      if (p.y <= layout.ball.y) {
+        crossing = p;
+        break;
+      }
+    }
+    const d12 = layout.players.find((p) => p.team === 'defence' && p.number === 12)!;
+    const d13 = layout.players.find((p) => p.team === 'defence' && p.number === 13)!;
+    expect(Math.abs(crossing!.x - (d12.x + d13.x) / 2) / PX_PER_M_X).toBeLessThanOrEqual(2);
+  });
+
+  it('Over / Under: every pass after 9 is 8 m or shorter', () => {
+    const over = PLAYS.find((p) => p.id === 'overunder')!;
+    for (const lane of lanes) {
+      const openSide = defaultOpenSide(lane);
+      const dir: 1 | -1 = openSide === 'right' ? 1 : -1;
+      const layout = phaseLayout({ lane, row: 'halfway', openSide, podMode: 'hidden', defenceMode: 'static' });
+      const built = buildPlay(layout, over.variants[0], dir, acrossScale(phaseGeometry(lane, 'halfway', openSide)));
+      for (const pass of over.variants[0].passes.filter((p) => p.from !== 9)) {
+        const at = attackersAt(layout, built, pass.t1);
+        const from = at.find((p) => p.number === pass.from)!;
+        const to = at.find((p) => p.number === pass.to)!;
+        const m = Math.hypot((from.x - to.x) / PX_PER_M_X, (from.y - to.y) / PX_PER_M_Y);
+        expect(m, `${lane}: ${pass.from}→${pass.to} is ${m.toFixed(1)} m`).toBeLessThanOrEqual(8);
+      }
+    }
+  });
+
+  it('Bread & Butter: pop 13 shows the same 10/12 switch picture as switch 12 until the hand-off', () => {
+    const bread = PLAYS.find((p) => p.id === 'bread')!;
+    const sw = bread.variants.find((v) => v.id === 'opt2')!;
+    const pop = bread.variants.find((v) => v.id === 'pop13')!;
+    expect(pop.routes[12]).toEqual(sw.routes[12]);
+    expect(pop.routes[10].filter((k) => k.t <= 2.0)).toEqual(sw.routes[10].filter((k) => k.t <= 2.0));
+  });
+
+  it('6 Go: the flanker runs it with forwards on and a blind to hold, otherwise 11', () => {
+    const six = PLAYS.find((p) => p.id === '6go')!;
+    expect(six.autoVariant!({ podMode: 'pods', narrowBlind: false })).toBe('flanker');
+    expect(six.autoVariant!({ podMode: 'tight', narrowBlind: false })).toBe('flanker');
+    expect(six.autoVariant!({ podMode: 'pods', narrowBlind: true })).toBe('wing');
+    expect(six.autoVariant!({ podMode: 'hidden', narrowBlind: false })).toBe('wing');
+    expect(phaseGeometry('left5', 'halfway', 'right').narrowBlind).toBe(true);
+    expect(phaseGeometry('left15', 'halfway', 'right').narrowBlind).toBe(false);
+  });
+
   it('defaultOpenSide mirrors for right-hand lanes', () => {
     expect(defaultOpenSide('right5')).toBe('left');
     expect(defaultOpenSide('left5')).toBe('right');
