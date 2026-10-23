@@ -72,7 +72,6 @@ export function PlaysTab() {
   useFeedbackContext(`Plays · ${play.name} · ${variant.label} · ${lane} ${openSide} · ${podMode} · ${defenceMode} defence`);
 
   const carrierId = ball.carrier ? `attack-${ball.carrier}` : null;
-  const activePass = variant.passes.find((p) => t >= p.t0 && t < p.t1);
 
   const selectPlay = (id: string) => {
     setPlayId(id);
