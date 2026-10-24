@@ -5,7 +5,11 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
  * Entry gate. Any non-empty password works; what matters is the button sequence:
  * OK → Cancel → OK. Pressing in any other order quietly resets the sequence.
  * Entry is remembered on the device.
+ *
+ * Off for now: the playbook is not sensitive, so everyone goes straight in. Set GATE_ENABLED
+ * back to true to put the password screen back; nothing else has to change.
  */
+export const GATE_ENABLED = false;
 export const ENTRY_SEQUENCE: Array<'ok' | 'cancel'> = ['ok', 'cancel', 'ok'];
 
 export function Gate({ children }: { children: ReactNode }) {
@@ -16,10 +20,10 @@ export function Gate({ children }: { children: ReactNode }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!entered) inputRef.current?.focus();
+    if (GATE_ENABLED && !entered) inputRef.current?.focus();
   }, [entered]);
 
-  if (entered) return <>{children}</>;
+  if (!GATE_ENABLED || entered) return <>{children}</>;
 
   const press = (kind: 'ok' | 'cancel') => {
     if (!password.trim()) {

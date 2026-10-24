@@ -23,7 +23,7 @@ Needs Node 22.13+ (the feedback store uses the built-in `node:sqlite`).
 
 ## Entry gate
 
-The site opens on a password screen. Any non-empty password works; what grants entry is the button sequence **OK → Cancel → OK** (Enter counts as OK). Entry is remembered per device in localStorage. Change the sequence in `ENTRY_SEQUENCE` in `src/components/Gate.tsx`; set it to `['ok']` for a plain "type anything and press OK" gate.
+The password screen is **off**: the site opens straight on the playbook. To put it back, set `GATE_ENABLED` to `true` in `src/components/Gate.tsx`. It then works like this: any non-empty password is accepted, and what grants entry is the button sequence **OK → Cancel → OK** (Enter counts as OK), remembered per device in localStorage. Change the sequence in `ENTRY_SEQUENCE` in the same file; set it to `['ok']` for a plain "type anything and press OK" gate.
 
 ## Feedback ("Say something")
 
