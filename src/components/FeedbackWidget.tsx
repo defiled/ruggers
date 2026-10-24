@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { identifyVisitor, trackEvent } from '../analytics';
 import { getFeedbackContext, subscribeFeedbackContext } from '../feedback/context';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { IconChat, IconClose } from './icons';
 
 type Status = 'idle' | 'sending' | 'sent' | 'error';
 
@@ -66,11 +67,8 @@ export function FeedbackWidget() {
 
   return (
     <>
-      <button type="button" className="fab" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open}>
-        <span className="fab__icon" aria-hidden="true">
-          ?
-        </span>
-        <span className="fab__label">Say something</span>
+      <button type="button" className="fab" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open} aria-label="Say something" title="Say something">
+        <IconChat size={20} />
       </button>
 
       {open && (
@@ -84,7 +82,7 @@ export function FeedbackWidget() {
                 </h2>
               </div>
               <button type="button" className="sheet__close" onClick={() => setOpen(false)} aria-label="Close">
-                ×
+                <IconClose size={18} />
               </button>
             </header>
 

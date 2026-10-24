@@ -1,4 +1,4 @@
-# Steamrollers Attack Playbook
+# Frederick RFC Attack Playbook
 
 Interactive 15v15 rugby union board for the team: starting formations for every set piece and field position, plus the six backline calls animated against a scripted defence. Mobile-first: on a phone the pitch rotates so the full width fills the screen (attack runs left → right), playback controls sit on the board itself, and the tabs move to a bottom bar.
 
@@ -16,8 +16,8 @@ npm run feedback # read messages people left on the site
 Needs Node 22.13+ (the feedback store uses the built-in `node:sqlite`).
 
 **03 · Defence**
-- Blitz, Drift, Pendulum (back three), Shooter, and a Dog-leg demo of what goes wrong when the line is not together.
-- Each system is animated against an attack moving the ball along its backline from a ruck. Switch the attack between deep, standard and flat to see why a deep attack invites the blitz and a flat one invites the drift; pick the ruck lane and direction.
+- Drift, Blitz, Pendulum (back three), Shooter, and a Dog-leg demo of what goes wrong when the line is not together.
+- Each picture is backs only, drawn the way Rugby Slate draws it: an attacking backline moving the ball from a ruck, and the defence answering. Switch the attack between deep, standard and flat to see why a deep attack invites the blitz and a flat one invites the drift; pick the ruck lane and direction. Pendulum shows just the back three and 9 against a ball moving across the field.
 - Time-synced captions explain each moment (set, trigger, line, contact, reload), role badges mark the sweeper, backfield, shooter, pendulum movers and the late man, and a live readout shows how far behind the gain line the carrier is.
 - Theory for each system: how it works, trigger, when we use it, why it works, strengths, weaknesses, how an attack beats it, common errors, coaching points, with a reference link to Rugby Slate. Plus "Read the attack" (what we see → what we call → why) and "Where on the pitch" (posture by zone).
 
@@ -37,6 +37,14 @@ A floating button on every screen opens a short form (name optional, message req
 
 Copy `.env.example` to `.env` (the server reads plain environment variables; use `export` or your host's config).
 
+## Brand and share card
+
+The club has no official mascot (we are not the Steamrollers). For now the crest is the church-steeples logo, "Frederick RFC · Founded 1990".
+
+- `brand/` holds the source logo and `og-card.html`, the share-card layout. See `brand/README.md` to regenerate the icons.
+- `public/` holds what the site serves: `favicon.ico`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `logo.webp` (masthead and gate), `manifest.webmanifest` and `og.png` (1200×630 link preview).
+- Link previews need absolute image URLs. `npm start` fills them in from each request's host (or `SITE_URL` if set). For static hosting without the server, set `VITE_SITE_URL=https://your.domain` before `npm run build`.
+
 ## Session replay (LogRocket)
 
 Production builds load LogRocket (`src/analytics.ts`, app `antirithm/steamrollers`). There are no accounts, so sessions are identified by a random per-device id kept in localStorage, plus the name the visitor last typed into the feedback form; sending feedback fires a `feedback_sent` event carrying the page context. It is off under `npm run dev`; set `VITE_LOGROCKET=1` to turn it on locally.
@@ -52,7 +60,8 @@ Production builds load LogRocket (`src/analytics.ts`, app `antirithm/steamroller
 
 **02 · Plays**
 - 2 Go (12 crash ball), 3 Go (miss-12, 13 unders), Bread & Butter (10/12 switch, option 13), Chopper (Rangy: 10 and 12 drift, 13 switch behind; option 12), Over/Under (13 under, 12 out the back to 15 and 14), 6 Go (blind winger inside ball).
-- Each play is modelled on its common coached version: runners come from depth, lines are steep, passes are made 3 m or more behind the defence. `npm test` enforces this for every play in every lane and direction.
+- Each play is modelled on its common coached version and cross-checked against the Rugby Slate animation of the same move (linked from each play): deeper alignment, passes 6-8 m from the line, and a strike runner who finishes in a named seam between two defenders (ringed and marked SEAM on the board), never on a man. The defence stands man-on-man so those seams are real. `npm test` enforces all of this for every play in every lane and direction.
+- Defence can be Static (the shape the move is drawn on, as on Rugby Slate), Drift, Rush or Hold.
 - All 15 attackers and 15 defenders are on the board. Forwards toggle between 1-3-3-1 pods, tight, or backs only.
 - Ruck position (lane) and attack direction mirror the play. Defence responds in drift / rush / hold mode and the defender the call targets is ringed.
 - Tap the board to play / pause; scrub bar with pass markers, speed and restart live on the board. Space / ← / → / Home work on a keyboard. Notes cover intent, sequence, read, target, watch-out, fallback and theory.

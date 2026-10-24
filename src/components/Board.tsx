@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import type { BoardView, PlayerPos, Point } from '../board/types';
-import { BALL_R, BOARD_H, BOARD_W, PLAYER_R, TEAM_STYLE, clampPlayer, distanceMetres, fmtM, metresFromHalfway, metresFromLeftTouch } from '../board/constants';
+import type { BoardView, PlayerPos, Point, Team } from '../board/types';
+import { BALL_R, BOARD_H, BOARD_W, PLAYER_R, SIDE_STYLE, clampPlayer, sideOf, distanceMetres, fmtM, metresFromHalfway, metresFromLeftTouch } from '../board/constants';
 import { Pitch } from './Pitch';
 
 export interface OffsideLine {
@@ -48,6 +48,8 @@ interface Props {
   showReadouts?: boolean;
   /** Rotate the board 90° so the pitch width fills a portrait phone; attack then runs left → right. */
   portrait?: boolean;
+  /** Which team is Frederick. Attack by default; the defence tab shows us defending. */
+  us?: Team;
 }
 
 /** Portrait: board (x, y) → screen (700 − y, x). */
@@ -70,6 +72,7 @@ export function Board({
   onMoveBall,
   showReadouts = false,
   portrait = false,
+  us = 'attack',
 }: Props) {
   const innerRef = useRef<SVGGElement>(null);
   const [drag, setDrag] = useState<{ id: string; isBall: boolean } | null>(null);
@@ -128,7 +131,7 @@ export function Board({
                 y1={l.y}
                 x2={1090}
                 y2={l.y}
-                stroke={l.team === 'attack' ? TEAM_STYLE.attack.fill : l.team === 'defence' ? '#fda4af' : '#fde68a'}
+                stroke={l.team === 'neutral' ? '#fde68a' : sideOf(l.team, us) === 'us' ? SIDE_STYLE.us.fill : '#fda4af'}
                 strokeWidth={2}
                 strokeDasharray="8 6"
                 opacity={0.85}
@@ -137,7 +140,7 @@ export function Board({
                 x={lx}
                 y={ly}
                 transform={portrait ? `rotate(-90 ${lx} ${ly})` : undefined}
-                fill={l.team === 'attack' ? '#bbf7d0' : l.team === 'defence' ? '#fecdd3' : '#fde68a'}
+                fill={l.team === 'neutral' ? '#fde68a' : sideOf(l.team, us) === 'us' ? '#bbf7d0' : '#fecdd3'}
                 fontSize={11}
                 fontWeight={600}
                 textAnchor={portrait ? 'start' : 'end'}
@@ -192,7 +195,7 @@ export function Board({
         ))}
 
         {players.map((p) => {
-          const style = TEAM_STYLE[p.team];
+          const style = SIDE_STYLE[sideOf(p.team, us)];
           const hi = highlightIds.includes(p.id);
           const ring = ringIds.includes(p.id);
           const badge = badges[p.id];
@@ -249,7 +252,7 @@ export function Board({
           >
             <rect width={184} height={38} rx={6} fill="rgba(2,6,23,0.88)" stroke="rgba(255,255,255,0.2)" />
             <text x={8} y={15} fill="#e2e8f0" fontSize={11} fontWeight={600}>
-              {TEAM_STYLE[hovered.team].label} #{hovered.number}
+              {SIDE_STYLE[sideOf(hovered.team, us)].label} #{hovered.number}
             </text>
             <text x={8} y={30} fill="#cbd5e1" fontSize={11}>
               {fmtM(metresFromLeftTouch(hovered.x))} from left touch · {fmtM(Math.abs(metresFromHalfway(view, hovered.y) ?? 0))}{' '}

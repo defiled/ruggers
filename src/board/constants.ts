@@ -7,10 +7,15 @@ export const BOARD_H = 700;
 export const PLAYER_R = 12;
 export const BALL_R = 6;
 
-export const TEAM_STYLE: Record<Team, { label: string; fill: string; stroke: string; text: string }> = {
-  attack: { label: 'Frederick', fill: '#22c55e', stroke: '#f0fdf4', text: '#04210f' },
-  defence: { label: 'Opposition', fill: '#f1f5f9', stroke: '#0c1d3f', text: '#0c1d3f' },
+export type Side = 'us' | 'them';
+
+export const SIDE_STYLE: Record<Side, { label: string; fill: string; stroke: string; text: string }> = {
+  us: { label: 'Frederick', fill: '#22c55e', stroke: '#f0fdf4', text: '#04210f' },
+  them: { label: 'Opposition', fill: '#f1f5f9', stroke: '#0c1d3f', text: '#0c1d3f' },
 };
+
+/** Which side of the ball we are on. The plays tab has us attacking; the defence tab has us defending. */
+export const sideOf = (team: Team, us: Team): Side => (team === us ? 'us' : 'them');
 
 export const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
 

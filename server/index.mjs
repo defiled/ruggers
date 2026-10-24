@@ -1,5 +1,5 @@
 import express from 'express';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { insertFeedback, listFeedback, openDb, resolveFeedback } from './db.mjs';
 
@@ -11,11 +11,13 @@ import { insertFeedback, listFeedback, openDb, resolveFeedback } from './db.mjs'
  * Serves ./dist when it exists (production). In dev, Vite proxies /api here.
  *
  * Env: PORT (8787), FEEDBACK_DB (data/feedback.db), ADMIN_KEY (list/resolve),
- *      FEEDBACK_WEBHOOK_URL (optional: Slack / Discord / Google Chat incoming webhook that gets pinged per message).
+ *      FEEDBACK_WEBHOOK_URL (optional: Slack / Discord / Google Chat incoming webhook that gets pinged per message),
+ *      SITE_URL (optional: public origin for share-card links; otherwise taken from each request's host).
  */
 const PORT = Number(process.env.PORT ?? 8787);
 const ADMIN_KEY = process.env.ADMIN_KEY ?? '';
 const WEBHOOK = process.env.FEEDBACK_WEBHOOK_URL ?? '';
+const SITE_URL = (process.env.SITE_URL ?? '').replace(/\/+$/, '');
 
 const db = openDb();
 const app = express();
@@ -80,10 +82,23 @@ app.post('/api/feedback/:id/resolve', requireAdmin, (req, res) => {
   res.json({ changed: resolveFeedback(db, Number(req.params.id)) });
 });
 
+/** Link previews (Slack, iMessage, WhatsApp, Facebook, X) need absolute og:image / og:url values. */
+const SHARE_META = /(<meta\s+(?:property|name)="(?:og:url|og:image|twitter:image)"\s+content=")(\/[^"]*)"/g;
+export function absoluteShareMeta(html, origin) {
+  return html.replace(SHARE_META, (_m, prefix, path) => `${prefix}${origin}${path}"`);
+}
+function requestOrigin(req) {
+  if (SITE_URL) return SITE_URL;
+  const proto = (req.get('x-forwarded-proto') ?? req.protocol).split(',')[0].trim();
+  const host = (req.get('x-forwarded-host') ?? req.get('host') ?? `localhost:${PORT}`).split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+
 const dist = resolve('dist');
 if (existsSync(dist)) {
-  app.use(express.static(dist));
-  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(resolve(dist, 'index.html')));
+  const indexHtml = readFileSync(resolve(dist, 'index.html'), 'utf8');
+  app.use(express.static(dist, { index: false }));
+  app.get(/^(?!\/api\/).*/, (req, res) => res.type('html').send(absoluteShareMeta(indexHtml, requestOrigin(req))));
 }
 
 app.listen(PORT, () => {

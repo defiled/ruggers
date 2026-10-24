@@ -3,9 +3,16 @@ import { DefenceTab } from './components/DefenceTab';
 import { FeedbackWidget } from './components/FeedbackWidget';
 import { FormationsTab } from './components/FormationsTab';
 import { Gate } from './components/Gate';
+import { IconGrid, IconPlay, IconShield } from './components/icons';
 import { PlaysTab } from './components/PlaysTab';
 
 type Tab = 'formations' | 'plays' | 'defence';
+
+const TABS: Array<{ id: Tab; label: string; Icon: typeof IconGrid }> = [
+  { id: 'formations', label: 'Formations', Icon: IconGrid },
+  { id: 'plays', label: 'Plays', Icon: IconPlay },
+  { id: 'defence', label: 'Defence', Icon: IconShield },
+];
 
 export default function App() {
   return (
@@ -17,37 +24,24 @@ export default function App() {
 
 function Shell() {
   const [tab, setTab] = useState<Tab>('plays');
-  const nav = (cls: string) => (
-    <nav className={cls} aria-label="Sections">
-      <button type="button" className={`tab${tab === 'formations' ? ' is-active' : ''}`} onClick={() => setTab('formations')}>
-        <span className="tab__icon" aria-hidden="true">
-          ▦
-        </span>
-        Formations
-      </button>
-      <button type="button" className={`tab${tab === 'plays' ? ' is-active' : ''}`} onClick={() => setTab('plays')}>
-        <span className="tab__icon" aria-hidden="true">
-          ▶
-        </span>
-        Plays
-      </button>
-      <button type="button" className={`tab${tab === 'defence' ? ' is-active' : ''}`} onClick={() => setTab('defence')}>
-        <span className="tab__icon" aria-hidden="true">
-          ⛨
-        </span>
-        Defence
-      </button>
-    </nav>
-  );
   return (
     <div className="app">
       <header className="masthead">
         <div className="masthead__inner">
-          <div>
-            <span className="eyebrow">Frederick Steamrollers</span>
-            <h1>Attack Playbook</h1>
+          <div className="masthead__brand">
+            <img className="masthead__crest" src="/logo.webp" alt="" width="28" height="28" />
+            <span className="masthead__club">Frederick RFC</span>
+            <h1 className="masthead__title">Playbook</h1>
           </div>
-          {nav('tabs tabs--top')}
+          {/* One nav: inline in the masthead on wide screens, a fixed bottom bar on phones. */}
+          <nav className="tabs" aria-label="Sections">
+            {TABS.map(({ id, label, Icon }) => (
+              <button key={id} type="button" className={`tab${tab === id ? ' is-active' : ''}`} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
+                <Icon className="tab__icon" size={18} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
         </div>
       </header>
       <main className="shell">{tab === 'formations' ? <FormationsTab /> : tab === 'plays' ? <PlaysTab /> : <DefenceTab />}</main>
@@ -55,7 +49,6 @@ function Shell() {
         Starting formations are copied from the Rugby Tactics Board presets (rugbytacticsboard.com). Plays follow their common coached versions; defenders run scripted responses, not real-time AI.
       </footer>
       <FeedbackWidget />
-      {nav('tabs tabs--bottom')}
     </div>
   );
 }

@@ -21,7 +21,7 @@ export function toSiteExport(name: string, description: string, stages: Layout[]
   return {
     version: 2,
     exportedAt: new Date().toISOString(),
-    metadata: { name, description, tags: ['steamrollers'] },
+    metadata: { name, description, tags: ['frederick-rfc'] },
     stages: stages.map((s) => ({
       boardView: s.boardView,
       players: s.players.map((p) => ({ ...p })),

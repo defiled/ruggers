@@ -37,14 +37,32 @@ const FORWARD_DRIFT: Keyframe[] = [
  * offsets are compressed by the same factor so runners still finish in the seams of a narrow shape.
  */
 export function buildPlay(layout: Layout, variant: PlayVariant, dir: 1 | -1, acrossScale = 1): BuiltPlay {
+  const set = withShift(layout, variant, dir, acrossScale);
   const routes: Record<string, AbsFrame[]> = {};
-  for (const p of layout.players) {
+  for (const p of set.players) {
     if (p.team !== 'attack') continue;
     const kfs = variant.routes[p.number] ?? (BACKS.includes(p.number) ? variant.routes[10] : FORWARD_DRIFT);
-    const abs = kfs.map((kf) => toAbs(p, layout.ball, dir, acrossScale, kf));
+    const abs = kfs.map((kf) => toAbs(p, set.ball, dir, acrossScale, kf));
     routes[p.id] = abs.map((f) => ({ ...f, ...clampPlayer(f) }));
   }
-  return { routes, variant, layout, dir };
+  return { routes, variant, layout: set, dir };
+}
+
+/**
+ * The layout with the variant's `shift` applied to the attack's set positions. The defence is
+ * untouched, so a man who sets tighter is still marked from the standard spot. Returns the same
+ * object when there is nothing to shift. Draw and mark from `BuiltPlay.layout`, not the raw layout.
+ */
+function withShift(layout: Layout, variant: PlayVariant, dir: 1 | -1, k: number): Layout {
+  const shift = variant.shift;
+  if (!shift) return layout;
+  const players = layout.players.map((p) => {
+    const s = p.team === 'attack' ? shift[p.number] : undefined;
+    if (!s) return p;
+    const moved = clampPlayer({ x: p.x + dir * (s.dx ?? 0) * k * PX_PER_M_X, y: p.y - (s.dy ?? 0) * PX_PER_M_Y });
+    return { ...p, x: moved.x, y: moved.y };
+  });
+  return { ...layout, players };
 }
 
 export function positionAt(frames: AbsFrame[], t: number): Point {
@@ -98,9 +116,12 @@ export const TRACK_LAG = 0.6;
 /**
  * Scripted defence, drawn the way Rugby Slate draws it: every front-line defender marks his
  * opposite man and comes straight up at him, shadowing a fraction of his lateral movement.
- * A straight runner therefore holds his defender; a runner who drifts drags his. In Drift / Hold
- * the line also slides out once the ball has gone past. The front line stops short of any
- * attacker in its channel so it never runs through the carrier; 9 and 15 cover from behind.
+ * A straight runner therefore holds his defender; a runner who drifts drags his. A man who has
+ * run past him has beaten him: the defender stands where that happened and does not chase him
+ * across or back (give `routes` so that moment can be found). In Drift / Hold the line also
+ * slides out once the ball has gone past. The front line stops short of any attacker in its
+ * channel so it never runs through the carrier, and never goes more than 2 m past the ruck line;
+ * 9 and 15 cover from behind.
  */
 export function defenceAt(
   layout: Layout,
@@ -111,15 +132,32 @@ export function defenceAt(
   attackers: Array<Point & { number?: number }> = [],
   /** The attackers TRACK_LAG seconds ago (what the defenders are reacting to); defaults to now. */
   lagged: Array<Point & { number?: number }> = attackers,
+  /** The attack's routes (BuiltPlay.routes), so a beaten defender can be held where his man passed him. */
+  routes?: Record<string, AbsFrame[]>,
 ): PlayerPos[] {
   const ruck = layout.ball;
   const out: PlayerPos[] = [];
   const startOf = (n: number) => layout.players.find((p) => p.team === 'attack' && p.number === n);
   const seenOf = (n: number) => lagged.find((a) => a.number === n);
+  const lineAt = (d: Point, tt: number) => d.y + Math.min(LINE_SPEED[mode] * tt, 9) * PX_PER_M_Y;
+  /**
+   * If attacker n has already run past defender d (his route met d's advancing line by now), the moment
+   * it happened: where the man was and where the line was. A beaten defender is held there.
+   */
+  const beatenBy = (n: number, d: Point): { x: number; lineY: number } | undefined => {
+    const frames = routes?.[`attack-${n}`];
+    if (!frames) return undefined;
+    for (let tt = 0; tt <= t; tt += 0.05) {
+      const lineY = Math.min(lineAt(d, tt), ruck.y + 2 * PX_PER_M_Y);
+      const p = positionAt(frames, tt);
+      if (p.y <= lineY) return { x: p.x, lineY };
+    }
+    return undefined;
+  };
   // Nearest attacker in a defender's channel: defenders advance until they meet him, not through him.
   const channelCap = (x: number, y: number) => {
     // Never beyond the ruck line + 2 m either: the line advances, it does not chase the ball wide.
-    let cap = Math.min(ball.y - 1.5 * PX_PER_M_Y, ruck.y + 2 * PX_PER_M_Y);
+    let cap = ruck.y + 2 * PX_PER_M_Y;
     for (const a of attackers) {
       if (Math.abs(a.x - x) < 2.2 * PX_PER_M_X && a.y > y) cap = Math.min(cap, a.y - 1.8 * PX_PER_M_Y);
     }
@@ -135,12 +173,13 @@ export function defenceAt(
       // Man marking: backs shadow their opposite number, forwards hold their channel.
       const mark = BACKS.includes(d.number) ? seenOf(d.number) : undefined;
       const mark0 = mark ? startOf(d.number) : undefined;
-      if (mark && mark0) x += (mark.x - mark0.x) * TRACK;
+      const beaten = mark && mark0 ? beatenBy(d.number, d) : undefined;
+      if (mark && mark0) x += ((beaten ? beaten.x : mark.x) - mark0.x) * TRACK;
       // Slide out once the ball is past him (a real drift), never before.
       const past = (ball.x - d.x) * dir - 2 * PX_PER_M_X;
       if (!guard && past > 0) x += dir * SLIDE[mode] * past;
-      const advance = Math.min(LINE_SPEED[mode] * t, 9) * PX_PER_M_Y;
-      y = Math.min(d.y + advance, channelCap(x, d.y));
+      // Once his man has run past him he is beaten: he stands where that happened, neither chasing nor backing off the next runner.
+      y = beaten ? beaten.lineY : Math.min(lineAt(d, t), channelCap(x, d.y));
     } else if (d.number === 9) {
       // Sweeper: tracks the ball from behind the line and stays there.
       x = lerp(d.x, ball.x, Math.min(1, t / 6));

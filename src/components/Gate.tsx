@@ -47,8 +47,9 @@ export function Gate({ children }: { children: ReactNode }) {
           press('ok');
         }}
       >
-        <span className="eyebrow">Frederick Steamrollers</span>
-        <h1 className="gate__title">Attack Playbook</h1>
+        <img className="gate__crest" src="/logo.webp" alt="Frederick RFC crest" width="88" height="88" />
+        <span className="eyebrow">Frederick RFC</span>
+        <h1 className="gate__title">Playbook</h1>
         <p className="muted">Team only. Enter the password to continue.</p>
         <label className="field">
           <span className="field__label">Password</span>

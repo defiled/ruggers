@@ -26,3 +26,9 @@ dist-ssr
 
 # Feedback database (project root only; src/data is source)
 /data/
+
+# Test runner output
+.vitest/
+
+# Verification screenshots
+/e-*.png

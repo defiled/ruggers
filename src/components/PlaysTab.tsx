@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DefenceMode, LaneId, OpenSide, PlayerPos, PodMode } from '../board/types';
 import { LANES } from '../data/scrumSetups';
 import { acrossScale, defaultOpenSide, phaseGeometry, phaseLayout } from '../data/phaseFormation';
@@ -21,6 +21,8 @@ export function PlaysTab() {
   const [defenceMode, setDefenceMode] = useState<DefenceMode>('static');
   const [showRoutes, setShowRoutes] = useState(true);
   const [showSeam, setShowSeam] = useState(true);
+  // Alternating plays (Bread & Butter, Chopper) step to the next option on each new run, once the first run has been seen.
+  const [advanceOnStart, setAdvanceOnStart] = useState(false);
   const playback = usePlayback(PLAY_DURATION);
 
   const play = PLAYS.find((p) => p.id === playId) ?? PLAYS[0];
@@ -38,23 +40,27 @@ export function PlaysTab() {
   const built = useMemo(() => buildPlay(layout, variant, dir, acrossScale(geometry)), [layout, variant, dir, geometry]);
 
   const t = playback.time;
+  // Set positions come from built.layout: a variant may shift a man off the standard alignment, and his marker must see that start.
   const attackers: PlayerPos[] = useMemo(
     () =>
-      layout.players
+      built.layout.players
         .filter((p) => p.team === 'attack')
         .map((p) => ({ ...p, ...positionAt(built.routes[p.id], t) })),
-    [layout, built, t],
+    [built, t],
   );
   const attackerPoints = useMemo(() => Object.fromEntries(attackers.map((p) => [p.id, { x: p.x, y: p.y }])), [attackers]);
   const ball = useMemo(() => ballAt(built, attackerPoints, t), [built, attackerPoints, t]);
   const lagged: PlayerPos[] = useMemo(
     () =>
-      layout.players
+      built.layout.players
         .filter((p) => p.team === 'attack')
         .map((p) => ({ ...p, ...positionAt(built.routes[p.id], Math.max(0, t - TRACK_LAG)) })),
-    [layout, built, t],
+    [built, t],
   );
-  const defence = useMemo(() => defenceAt(layout, defenceMode, dir, t, ball.pos, attackers, lagged), [layout, defenceMode, dir, t, ball.pos, attackers, lagged]);
+  const defence = useMemo(
+    () => defenceAt(built.layout, defenceMode, dir, t, ball.pos, attackers, lagged, built.routes),
+    [built, defenceMode, dir, t, ball.pos, attackers, lagged],
+  );
   const seam = useMemo(() => (showSeam ? seamFor(built) : null), [built, showSeam]);
 
   const routes: Route[] = useMemo(() => {
@@ -76,8 +82,28 @@ export function PlaysTab() {
   const selectPlay = (id: string) => {
     setPlayId(id);
     setVariantIdx(0);
+    setAdvanceOnStart(false);
     playback.restart();
   };
+
+  const selectVariant = (i: number) => {
+    setVariantIdx(i);
+    setAdvanceOnStart(false); // the option just picked runs first
+    playback.restart();
+  };
+
+  // Play / pause. A new run (from the start, or again after the end) steps an alternating play to its other option,
+  // except the first run after a play or option was picked by hand. Pausing and resuming mid-clip is not a new run.
+  const alternates = !!play.alternate && !play.autoVariant && play.variants.length > 1;
+  const newRun = !playback.playing && (playback.time === 0 || playback.time >= PLAY_DURATION);
+  const optionCount = play.variants.length;
+  const toggle = useCallback(() => {
+    if (alternates && newRun) {
+      if (advanceOnStart) setVariantIdx((i) => (i + 1) % optionCount);
+      setAdvanceOnStart(true);
+    }
+    playback.toggle();
+  }, [alternates, newRun, advanceOnStart, optionCount, playback]);
 
   // Keyboard transport: space play/pause, arrows nudge, Home restart (ignored while typing in a control).
   useEffect(() => {
@@ -86,29 +112,22 @@ export function PlaysTab() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
       if (e.key === ' ') {
         e.preventDefault();
-        playback.toggle();
+        toggle();
       } else if (e.key === 'ArrowRight') playback.seek(playback.time + 0.2);
       else if (e.key === 'ArrowLeft') playback.seek(playback.time - 0.2);
       else if (e.key === 'Home') playback.restart();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [playback]);
+  }, [playback, toggle]);
 
   const setup = (
     <div className="toolbar">
       {play.autoVariant && <p className="hint hint--inline">{variant.label}. {play.autoNote}</p>}
       {play.variants.length > 1 && !play.autoVariant && (
-        <Segmented
-          label="Option"
-          value={variantIdx}
-          onChange={(v) => {
-            setVariantIdx(v);
-            playback.restart();
-          }}
-          options={play.variants.map((v, i) => ({ value: i, label: v.label }))}
-        />
+        <Segmented label="Option" value={variantIdx} onChange={selectVariant} options={play.variants.map((v, i) => ({ value: i, label: v.label }))} />
       )}
+      {alternates && <p className="hint hint--inline">Alternates each run.</p>}
       <Segmented
         label="Ruck position"
         value={lane}
@@ -195,9 +214,9 @@ export function PlaysTab() {
             duration={PLAY_DURATION}
             speed={playback.speed}
             passes={variant.passes}
-            onToggle={playback.toggle}
+            onToggle={toggle}
             onSeek={playback.seek}
-            onRestart={playback.restart}
+            onRestart={() => playback.restart()}
             onSpeed={playback.setSpeed}
           />
         </div>
