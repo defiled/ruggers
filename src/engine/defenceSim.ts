@@ -3,14 +3,17 @@ import { BOARD_W, PX_PER_M_X, PX_PER_M_Y, clamp, clampPlayer } from '../board/co
 import type { Alignment, DefenceSystemId } from '../data/defenceSystems';
 import { phaseGeometry, type PhaseGeometry } from '../data/phaseFormation';
 import type { Keyframe, PlayVariant } from '../data/plays';
-import { buildPlay, positionAt, type AbsFrame, type BuiltPlay } from './animate';
+import type { Marker, Route } from '../components/Board';
+import { ballAt, buildPlay, positionAt, type AbsFrame, type BallState, type BuiltPlay } from './animate';
 
 /**
  * Defence scenarios drawn the way Rugby Slate draws them: backs only, a ruck, and the ball
  * moving along the attacking backline while the defence answers with the chosen system.
  * Each system has its own cast and its own movement rule (see driftAt, blitzAt, shooterAt,
  * pendulumAt). The attack can align deep, standard or flat so "blitz when they are deep,
- * drift when they are flat and wide" can be seen rather than read.
+ * drift when they are flat and wide" can be seen rather than read. We are the defence: drift,
+ * blitz and shooter end with our tackle, found by scanning the clip once when it is built, and the
+ * play freezes there. The dog-leg is the picture of a defence that fails, so it has no tackle.
  */
 
 export const TRIGGER = 0.3; // ball leaves 9's hands
@@ -31,7 +34,22 @@ export interface Scenario {
   across: number;
   /** Pendulum only: the ball is not carried, it glides along this path. */
   ballPath?: AbsFrame[];
+  /** Our tackle, when the system makes one. The play freezes at `at`. */
+  tackle?: Tackle;
 }
+
+export interface Tackle {
+  at: number;
+  /** Defender's number. */
+  tackler: number;
+  /** Carrier's number. */
+  carrier: number;
+}
+
+/** A defender this close to the carrier (metres) has him. */
+const TACKLE_REACH = 2.2;
+/** Seconds the tackler takes to close the last stride and wrap. */
+const WRAP_SECONDS = 0.3;
 
 const mx = (m: number) => m * PX_PER_M_X;
 const my = (m: number) => m * PX_PER_M_Y;
@@ -40,6 +58,7 @@ const smooth = (u: number) => {
   const c = clamp(u, 0, 1);
   return c * c * (3 - 2 * c);
 };
+const smoothstep = (a: number, b: number, v: number) => smooth((v - a) / (b - a));
 
 const steady = (dy: number, dx = 0): Keyframe[] => [
   { t: 0, dx: 0, dy: 0 },
@@ -53,7 +72,7 @@ const NINE_ROUTE: Keyframe[] = [
   { t: DEF_DURATION, dx: 3, dy: 4 },
 ];
 
-/** Ball moved along the backline: 9 → 10 → 12 → 13 → 14, each receiver running onto it. */
+/** Ball moved along the backline: 9 → 10 → 12 → 13 → 14, each receiver running onto it. 14 finishes on the edge. */
 const WIDE: PlayVariant = {
   id: 'wide',
   label: 'Ball to the edge',
@@ -70,14 +89,53 @@ const WIDE: PlayVariant = {
     10: steady(5, 1.5),
     12: steady(6, 1.5),
     13: steady(6.5, 1.5),
-    14: steady(7, 0.5),
+    14: steady(7, 2),
   },
 };
 
-/** The dog-leg demo: 10 hits 12 on a straight line into the seam beside the late defender. */
+/**
+ * The drift picture: the same ball to the edge, but every receiver runs onto his pass toward the
+ * gain line. How far each man runs depends on how deep he set (`depths`, metres behind the gain
+ * line, alignment included), so the ball reaches 14 near the line whatever the alignment, and the
+ * slide has put 13's marker on him for the tackle.
+ */
+function driftVariant(depths: Record<number, number>): PlayVariant {
+  const toGo = (n: number) => Math.max(depths[n] - 3.5, 1); // metres to a stride short of the gain line
+  const receiver = (n: number, pass: number, dxOut: number): Keyframe[] => {
+    const d = toGo(n);
+    const dy = Math.min(0.6 * d, 3 * pass);
+    return [
+      { t: 0, dx: 0, dy: 0 },
+      { t: pass, dx: dxOut * 0.6, dy },
+      { t: DEF_DURATION, dx: dxOut, dy: dy + 1.5 },
+    ];
+  };
+  const d14 = toGo(14);
+  const catch14 = WIDE.passes[3].t1;
+  return {
+    ...WIDE,
+    id: 'driftWide',
+    routes: {
+      9: NINE_ROUTE,
+      10: receiver(10, WIDE.passes[1].t0, 1.0),
+      12: receiver(12, WIDE.passes[2].t0, 1.5),
+      13: receiver(13, WIDE.passes[3].t0, 2.0),
+      // 14 builds speed as the ball comes and hits the last pass flat out, no faster than a sprint.
+      14: [
+        { t: 0, dx: 0, dy: 0 },
+        { t: catch14 - 1.2, dx: 0.3, dy: 0.15 * d14 },
+        { t: catch14, dx: 1, dy: 0.45 * d14 },
+        { t: catch14 + 1.2, dx: 2.5, dy: Math.min(d14, 0.45 * d14 + 8) },
+        { t: DEF_DURATION, dx: 3.2, dy: Math.min(d14, 0.45 * d14 + 8) + 1.5 },
+      ],
+    },
+  };
+}
+
+/** The dog-leg demo: 10 hits 12, who sees the kink and takes the inside gap beside the late defender. */
 const STRIKE_12: PlayVariant = {
   id: 'strike12',
-  label: 'Straight runner into the seam',
+  label: 'Runner into the seam',
   strike: 12,
   seam: [],
   passes: [
@@ -96,33 +154,46 @@ const STRIKE_12: PlayVariant = {
       { t: 0, dx: 0, dy: 0 },
       { t: 1.0, dx: 0, dy: 0.8 },
       { t: 1.8, dx: -0.5, dy: 4 },
-      { t: 3.0, dx: -1, dy: 12 },
-      { t: DEF_DURATION, dx: -1.5, dy: 22 },
+      { t: 2.6, dx: -3.5, dy: 8 },
+      { t: 3.4, dx: -4.5, dy: 13 },
+      { t: DEF_DURATION, dx: -5, dy: 22 },
     ],
     13: steady(6, 1),
     14: steady(6, 0),
   },
 };
 
-/** The shooter picture: 9 hits the first receiver, who is tackled before he can move the ball on. */
-const FIRST_RECEIVER: PlayVariant = {
-  id: 'firstReceiver',
-  label: 'Ball to the first receiver',
-  strike: 10,
+/** The shooter picture: their 10 passes to 12, and our 12 has shot the moment the pass went. Their 12 is hit as he catches. */
+const TO_TWELVE: PlayVariant = {
+  id: 'toTwelve',
+  label: 'Ball to 12',
+  strike: 12,
   seam: [],
-  passes: [{ from: 9, to: 10, t0: 0.3, t1: 0.8 }],
+  passes: [
+    { from: 9, to: 10, t0: 0.3, t1: 0.7 },
+    { from: 10, to: 12, t0: 1.2, t1: 1.6 },
+  ],
   routes: {
     9: NINE_ROUTE,
     10: [
       { t: 0, dx: 0, dy: 0 },
-      { t: 0.8, dx: 0, dy: 1 },
-      { t: 1.6, dx: 0.3, dy: 3 },
-      { t: DEF_DURATION, dx: 0.3, dy: 3.3 },
+      { t: 0.7, dx: 0, dy: 1 },
+      { t: 1.6, dx: 0.5, dy: 3 },
+      { t: DEF_DURATION, dx: 1, dy: 5 },
     ],
-    12: steady(4, 1),
-    13: steady(4.5, 1),
+    12: [
+      { t: 0, dx: 0, dy: 0 },
+      { t: 0.8, dx: 0, dy: 0.6 },
+      { t: 1.6, dx: 0.3, dy: 3.2 },
+      { t: 2.0, dx: 0.3, dy: 3.6 },
+      { t: DEF_DURATION, dx: 0.3, dy: 3.8 },
+    ],
+    13: steady(5, 1),
   },
 };
+
+/** Pendulum: nobody carries, the ball glides along `ballPath`. No passes, so the scrubber shows none. */
+const PENDULUM: PlayVariant = { id: 'pendulum', label: 'Ball across the field', strike: 14, seam: [], passes: [], routes: {} };
 
 /** [number, metres across toward the open side, metres from the gain line (+ attack side, − defence side)]. */
 type Spot = [number, number, number];
@@ -143,21 +214,22 @@ const BACKLINE: Spot[] = [
 const inside = (n: number, across: number): Spot => [n, across - 1, -LINE_DEPTH];
 
 const CAST: Record<DefenceSystemId, Cast> = {
-  // One-man overlap: three defenders against four receivers. The slide and the touchline absorb it.
+  // Three defenders against five attackers (9 plus four receivers). The slide and the touchline absorb the overlap.
   drift: { attack: BACKLINE, defence: [inside(10, 9), inside(12, 17), inside(13, 25)] },
   blitz: { attack: BACKLINE, defence: [inside(10, 9), inside(12, 17), inside(13, 25), inside(14, 33)] },
   dogleg: { attack: BACKLINE, defence: [inside(10, 9), inside(12, 17), inside(13, 25), inside(14, 33)] },
+  // Our 12 shoots on their 10 → 12 pass. Their 12 stands a touch flatter so the picture is the Slate one: tackled as he catches.
   shooter: {
     attack: [
       [9, 0.6, 1],
-      [10, 9, 9],
-      [12, 17, 11],
-      [13, 25, 13],
+      [10, 9, 8],
+      [12, 17, 9],
+      [13, 25, 12],
     ],
     defence: [[9, 1, -6], inside(10, 9), inside(12, 17), inside(13, 25)],
   },
-  // Back three plus the sweeper. Placed by pendulumAt from the ball, these are only the set positions.
-  pendulum: { attack: [], defence: [[9, 0, -6], [11, 0, -9], [15, 0, -16], [14, 0, -9]] },
+  // Back three only, as Rugby Slate draws it. Placed by pendulumAt from the ball; these are only the set positions.
+  pendulum: { attack: [], defence: [[11, 0, -9], [15, 0, -16], [14, 0, -9]] },
 };
 
 const BACKS = new Set([10, 12, 13, 14]);
@@ -190,20 +262,83 @@ export function buildScenario(system: DefenceSystemId, lane: LaneId, openSide: O
       { t: 2.4, x: openEdge, y },
       { t: DEF_DURATION, x: blindEdge, y },
     ];
-    const sc: Scenario = { system, layout, built: buildPlay(layout, WIDE, dir, k), dir, geometry, alignment, defensiveLineY, across: k, ballPath };
+    const sc: Scenario = { system, layout, built: buildPlay(layout, PENDULUM, dir, k), dir, geometry, alignment, defensiveLineY, across: k, ballPath };
     // Set positions come from the ball at t = 0 so the picture is right before play starts.
-    sc.layout = { ...layout, players: pendulumAt(sc, 0, ballPath[0]).players };
+    sc.layout = { ...layout, players: pendulumAt(sc, ballPath[0]).players };
     return sc;
   }
 
-  const variant = system === 'dogleg' ? STRIKE_12 : system === 'shooter' ? FIRST_RECEIVER : WIDE;
-  return { system, layout, built: buildPlay(layout, variant, dir, k), dir, geometry, alignment, defensiveLineY, across: k };
+  const depths = Object.fromEntries(cast.attack.map(([n, , depth]) => [n, BACKS.has(n) ? depth + shift : depth]));
+  const variant = system === 'dogleg' ? STRIKE_12 : system === 'shooter' ? TO_TWELVE : system === 'drift' ? driftVariant(depths) : WIDE;
+  const sc: Scenario = { system, layout, built: buildPlay(layout, variant, dir, k), dir, geometry, alignment, defensiveLineY, across: k };
+  if (system !== 'dogleg') sc.tackle = findTackle(sc);
+  return sc;
+}
+
+export interface SimFrame {
+  attackers: PlayerPos[];
+  ball: BallState;
+  defence: DefenceFrame;
+}
+
+/** Everyone's position at time t with no tackle applied: the raw rules, used to find the tackle. */
+function rawFrame(sc: Scenario, t: number): SimFrame {
+  const attackers = sc.layout.players.filter((p) => p.team === 'attack').map((p) => ({ ...p, ...positionAt(sc.built.routes[p.id], t) }));
+  const ball: BallState = sc.ballPath
+    ? { pos: positionAt(sc.ballPath, t), carrier: null, inFlight: false }
+    : ballAt(sc.built, Object.fromEntries(attackers.map((p) => [p.id, { x: p.x, y: p.y }])), t);
+  return { attackers, ball, defence: defendersAt(sc, t, ball.pos, attackers, ball.carrier) };
+}
+
+const metresApart = (a: Point, b: Point) => Math.hypot((a.x - b.x) / PX_PER_M_X, (a.y - b.y) / PX_PER_M_Y);
+
+/** The first moment a defender is within reach of the carrier, and who they both are. */
+function findTackle(sc: Scenario): Tackle | undefined {
+  for (let t = TRIGGER; t <= DEF_DURATION; t += 0.05) {
+    const { attackers, ball, defence } = rawFrame(sc, t);
+    if (ball.carrier == null) continue;
+    const carrier = attackers.find((a) => a.number === ball.carrier);
+    if (!carrier) continue;
+    for (const d of defence.players) {
+      // Only the man marking the carrier (or the shooter) makes the tackle; a defender sliding past does not.
+      const badge = defence.badges[d.id];
+      if (badge !== 'BALL' && badge !== 'SHOOT') continue;
+      if (Math.abs(d.x - carrier.x) / PX_PER_M_X <= 2 && metresApart(d, carrier) <= TACKLE_REACH) {
+        return { at: Math.round(t * 100) / 100, tackler: d.number, carrier: carrier.number };
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The whole picture at time t. After the tackle the play is dead: the attack and the rest of the
+ * line hold where they were, and the tackler closes the last stride onto the carrier.
+ */
+export function simulate(sc: Scenario, t: number): SimFrame {
+  const tk = sc.tackle;
+  if (!tk || t < tk.at) return rawFrame(sc, t);
+  const frame = rawFrame(sc, tk.at);
+  const carrier = frame.attackers.find((a) => a.number === tk.carrier);
+  const u = smooth((t - tk.at) / WRAP_SECONDS);
+  const players = frame.defence.players.map((d) => {
+    if (d.number !== tk.tackler || !carrier) return d;
+    return finish(d, lerp(d.x, carrier.x - sc.dir * mx(0.4), u), lerp(d.y, carrier.y - my(0.7), u));
+  });
+  const tacklerId = `defence-${tk.tackler}`;
+  const badges = { ...frame.defence.badges, [tacklerId]: 'TACKLE' };
+  const rings = frame.defence.rings.includes(tacklerId) ? frame.defence.rings : [...frame.defence.rings, tacklerId];
+  return { ...frame, defence: { ...frame.defence, players, badges, rings } };
 }
 
 export interface DefenceFrame {
   players: PlayerPos[];
   badges: Record<string, string>;
   rings: string[];
+  /** Extra lines: the pendulum link between the back three, the dog-leg runner's options. */
+  routes?: Route[];
+  /** Labelled points: the gaps either side of the late defender. */
+  markers?: Marker[];
 }
 
 interface Ctx {
@@ -217,11 +352,18 @@ interface Ctx {
   rings: string[];
 }
 
-/** Stop a defender 1.2 m short of any attacker still in front of him in his channel, so the line never runs through the attack. */
+/**
+ * Stop a defender 1.2 m short of any attacker still in front of him in his channel, so the line
+ * never runs through the attack. The cap eases in as the attacker gets laterally closer (fully on
+ * inside 1.5 m, off beyond 3 m) so nothing snaps when a runner crosses a channel.
+ */
 function channelCap(ctx: Ctx, x: number, y: number): number {
-  let cap = ctx.sc.layout.ball.y + my(10);
+  const far = ctx.sc.layout.ball.y + my(14); // nobody chases past here, even with nobody in front
+  let cap = far;
   for (const a of ctx.attackers) {
-    if (a.y > y && Math.abs(a.x - x) < mx(2.2)) cap = Math.min(cap, a.y - my(1.2));
+    if (a.y <= y) continue;
+    const w = 1 - smoothstep(1.5, 3, Math.abs(a.x - x) / PX_PER_M_X);
+    if (w > 0) cap = Math.min(cap, lerp(far, a.y - my(1.2), w));
   }
   return Math.max(cap, y);
 }
@@ -230,7 +372,7 @@ function channelCap(ctx: Ctx, x: number, y: number): number {
 const advance = (dt: number, speed: number, maxM: number) => my(Math.min(speed * dt, maxM));
 
 /** A defender's spot on his man: the inside shoulder, one metre toward the ruck. */
-const shoulder = (ctx: Ctx, mark: PlayerPos | undefined, fallback: number) => (mark ? mark.x - ctx.sc.dir * mx(1) * ctx.sc.across : fallback);
+const shoulderOf = (sc: Scenario, mark: Point | undefined, fallback: number) => (mark ? mark.x - sc.dir * mx(1) * sc.across : fallback);
 
 const attacker = (ctx: Ctx, n: number) => ctx.attackers.find((a) => a.number === n);
 
@@ -241,7 +383,7 @@ function finish(d: PlayerPos, x: number, y: number): PlayerPos {
 
 export function defendersAt(sc: Scenario, t: number, ball: Point, attackers: PlayerPos[], carrier: number | null): DefenceFrame {
   const ctx: Ctx = { sc, t, dt: Math.max(0, t - TRIGGER), ball, attackers, carrier, badges: {}, rings: [] };
-  const frame = sc.system === 'drift' ? driftAt(ctx) : sc.system === 'shooter' ? shooterAt(ctx) : sc.system === 'pendulum' ? pendulumAt(sc, t, ball) : blitzAt(ctx);
+  const frame = sc.system === 'drift' ? driftAt(ctx) : sc.system === 'shooter' ? shooterAt(ctx) : sc.system === 'pendulum' ? pendulumAt(sc, ball) : blitzAt(ctx);
   for (const id of Object.keys(frame.badges)) if (!frame.badges[id]) delete frame.badges[id];
   return frame;
 }
@@ -250,41 +392,47 @@ export function defendersAt(sc: Scenario, t: number, ball: Point, attackers: Pla
 const RECEIVERS = [10, 12, 13, 14];
 
 /**
- * Drift, as Rugby Slate draws it: the line comes up under control, and the moment the first pass
- * goes the whole line pushes "up and out" one man: 10's marker takes 12, 12's takes 13, 13's takes 14.
- * Each defender then shadows his new man's inside shoulder, so spacing is kept and the overlap is
- * absorbed with the touchline as the extra defender.
+ * Drift, as Rugby Slate draws it: three defenders on four receivers. The line comes up under
+ * control, and from the moment the first pass goes (10 → 12) the whole line drifts "up and out"
+ * one man together: 10's marker ends on 12, 12's on 13, 13's on 14. The slide is one smooth
+ * movement paced to the ball, finishing as 14 catches, each man easing from the inside shoulder
+ * of his own attacker to the inside shoulder of the next, so the spacing holds the whole way.
+ * The touchline is the extra defender; 13's marker makes the tackle on the edge.
  */
 function driftAt(ctx: Ctx): DefenceFrame {
   const { sc, t, dt, badges, rings } = ctx;
   const defence = sc.layout.players.filter((p) => p.team === 'defence');
-  const firstPass = sc.built.variant.passes[1]; // 10 → 12: the ball going past the first marker
-  const handOff = firstPass ? firstPass.t0 : Infinity;
-  const SLIDE_SECONDS = 1.3;
+  const passes = sc.built.variant.passes;
+  const handOff = passes[1]; // 10 → 12: the ball going past the first marker
+  const lastCatch = passes[passes.length - 1];
+  const s = handOff && lastCatch ? smooth((t - handOff.t0) / (lastCatch.t1 - handOff.t0)) : 0;
 
   const players = defence.map((d) => {
-    const markIndex = RECEIVERS.indexOf(d.number);
-    const mark = attacker(ctx, RECEIVERS[markIndex]);
-    const next = attacker(ctx, RECEIVERS[Math.min(markIndex + 1, RECEIVERS.length - 1)]);
-    const inner = shoulder(ctx, mark, d.x);
-    const outer = shoulder(ctx, next, inner);
-    // Ripple from the inside out so the slide reads as a chain, not a jump.
-    const s = smooth((t - handOff - markIndex * 0.12) / SLIDE_SECONDS);
-    const x = lerp(inner, outer, s);
-    const y = Math.min(d.y + advance(dt, 1.6, 7), channelCap(ctx, x, d.y));
-    const marking = s < 0.5 ? mark : next;
-    if (marking && ctx.carrier === marking.number) badges[d.id] = 'BALL';
+    const i = RECEIVERS.indexOf(d.number);
+    const next = RECEIVERS[Math.min(i + 1, RECEIVERS.length - 1)];
+    const own = shoulderOf(sc, attacker(ctx, RECEIVERS[i]), d.x);
+    const out = shoulderOf(sc, attacker(ctx, next), own);
+    const x = lerp(own, out, s);
+    const marking = s >= 0.5 ? next : RECEIVERS[i];
+    const y = Math.min(d.y + advance(dt, 1.6, 8), channelCap(ctx, x, d.y));
+    if (ctx.carrier === marking) badges[d.id] = 'BALL';
+    else if (marking !== RECEIVERS[i]) badges[d.id] = `→${marking}`;
     return finish(d, x, y);
   });
   return { players, badges, rings };
 }
 
+/** Blitz line speed (m/s): a real rush, so the tackle lands on the first receivers behind the gain line. */
+const BLITZ_SPEED = 6.0;
+
 /**
  * Blitz (and the dog-leg demo): every defender marks his man and rushes up flat and fast, sliding
- * only a little with the ball. In the dog-leg the defender opposite 12 is late off the line.
+ * only a little with the ball. In the dog-leg the defender opposite 12 is late off the line and
+ * flat-footed, and the runner's two options are drawn in front of him; that line comes up slower
+ * so the kink reads clearly.
  */
 function blitzAt(ctx: Ctx): DefenceFrame {
-  const { sc, dt, ball, badges, rings } = ctx;
+  const { sc, t, dt, ball, badges, rings } = ctx;
   const ruck = sc.layout.ball;
   const defence = sc.layout.players.filter((p) => p.team === 'defence');
   const ballTravel = (ball.x - ruck.x) * sc.dir;
@@ -294,46 +442,91 @@ function blitzAt(ctx: Ctx): DefenceFrame {
   const players = defence.map((d) => {
     const mark = attacker(ctx, d.number);
     const startMark = sc.layout.players.find((p) => p.team === 'attack' && p.number === d.number);
-    let speed = 3.0;
+    let speed = sc.system === 'blitz' ? BLITZ_SPEED : 3.0;
+    let track = 0.7;
     if (d.number === late) {
       speed = 0.9;
+      track = 0; // late and flat-footed: he does not follow his man either
       badges[d.id] = 'LATE';
       rings.push(d.id);
     } else if (onBall && d.id === onBall.id) {
       badges[d.id] = 'BALL';
     }
     // Shadow the man's lateral movement, plus a small slide with the ball.
-    const x = d.x + (mark && startMark ? (mark.x - startMark.x) * 0.7 : 0) + sc.dir * 0.15 * ballTravel;
-    const y = Math.min(d.y + advance(dt, speed, 12), channelCap(ctx, x, d.y));
+    const x = d.x + (mark && startMark ? (mark.x - startMark.x) * track : 0) + sc.dir * 0.05 * ballTravel;
+    const y = Math.min(d.y + advance(dt, speed, 16), channelCap(ctx, x, d.y));
     return finish(d, x, y);
   });
-  return { players, badges, rings };
+
+  const frame: DefenceFrame = { players, badges, rings };
+  if (late) Object.assign(frame, doglegOptions(ctx, players, t));
+  return frame;
 }
 
 /**
- * Shooter in space, as Rugby Slate draws it: the defender opposite the first receiver breaks the
- * line early and goes straight at him; the men either side come up under control and drift
- * slightly in to fill his channel; 9 lives behind the shooter for the snipe and the offload.
+ * The dog-leg runner's options: from the moment the line has kinked (1.0 s) two dashed lines run
+ * from 12 to the gap inside and the gap outside the late defender. At 2.2 s he commits inside and
+ * only that line stays, until he is through it.
+ */
+function doglegOptions(ctx: Ctx, defenders: PlayerPos[], t: number): Pick<DefenceFrame, 'routes' | 'markers'> {
+  const runner = attacker(ctx, 12);
+  const late = defenders.find((d) => d.number === 12);
+  const d10 = defenders.find((d) => d.number === 10);
+  const d13 = defenders.find((d) => d.number === 13);
+  if (!runner || !late || !d10 || !d13 || t < 1.0) return {};
+  // The gaps sit either side of the late man, level with him on the runner's side (the men beside him are already past).
+  const insideGap: Point = { x: (d10.x + late.x) / 2, y: late.y + my(1.5) };
+  const outsideGap: Point = { x: (d13.x + late.x) / 2, y: late.y + my(1.5) };
+  const gold = '#fde68a';
+  if (t < 2.2) {
+    return {
+      routes: [
+        { id: 'option-inside', points: [runner, insideGap], color: gold, emphasis: true },
+        { id: 'option-outside', points: [runner, outsideGap], color: gold, emphasis: true },
+      ],
+      markers: [
+        { x: insideGap.x, y: insideGap.y, label: 'INSIDE' },
+        { x: outsideGap.x, y: outsideGap.y, label: 'OUTSIDE' },
+      ],
+    };
+  }
+  if (runner.y <= late.y) return {}; // past the late man: through
+  return { routes: [{ id: 'option-inside', points: [runner, insideGap], color: gold, emphasis: true }], markers: [{ x: insideGap.x, y: insideGap.y, label: 'INSIDE' }] };
+}
+
+/** When their 12 leaves the line: 10's hips turn to pass, a beat before the ball goes at 1.2 s. */
+const SHOOT_AT = 1.0;
+const SHOOT_SPEED = 7.5; // m/s
+
+/**
+ * Shooter, as Rugby Slate draws it: the line comes up under control and the defender opposite the
+ * next receiver shoots out of it as the pass is thrown, meeting the receiver as he catches, well
+ * behind the gain line. Here our 12 shoots on their 10 → 12 pass. 10 and 13 keep coming and fold
+ * in toward the hole he left; 9 lives behind the shooter for the snipe and the offload.
  */
 function shooterAt(ctx: Ctx): DefenceFrame {
-  const { sc, dt, ball, badges, rings } = ctx;
+  const { sc, t, dt, ball, badges, rings } = ctx;
   const defence = sc.layout.players.filter((p) => p.team === 'defence');
-  const shooterStart = defence.find((d) => d.number === 10)!;
-  const target = attacker(ctx, 10);
+  const shooterStart = defence.find((d) => d.number === 12)!;
+  const target = attacker(ctx, 12);
+  const lineUp = (d: PlayerPos, upTo: number) => d.y + advance(Math.max(0, Math.min(t, upTo) - TRIGGER), 1.4, 5);
 
   const players = defence.map((d) => {
-    if (d.number === 10) {
+    if (d.number === 12) {
+      if (t < SHOOT_AT || !target) {
+        const y = Math.min(lineUp(d, t), channelCap(ctx, d.x, d.y));
+        return finish(d, d.x, y);
+      }
       badges[d.id] = 'SHOOT';
       rings.push(d.id);
-      if (!target) return d;
+      const fromY = lineUp(d, SHOOT_AT);
       const vx = (target.x - d.x) / PX_PER_M_X;
-      const vy = (target.y - d.y) / PX_PER_M_Y;
+      const vy = (target.y - fromY) / PX_PER_M_Y;
       const dist = Math.hypot(vx, vy);
-      const travel = Math.min(5.5 * dt, Math.max(dist - 1.0, 0));
+      const travel = Math.min(SHOOT_SPEED * (t - SHOOT_AT), Math.max(dist - 1.0, 0));
       const u = dist > 0 ? travel / dist : 0;
       const x = d.x + mx(vx) * u;
-      const y = Math.min(d.y + my(vy) * u, channelCap(ctx, x, d.y));
-      return finish(d, x, y);
+      return finish(d, x, Math.min(fromY + my(vy) * u, channelCap(ctx, x, d.y)));
     }
     if (d.number === 9) {
       badges[d.id] = 'SWEEP';
@@ -341,23 +534,24 @@ function shooterAt(ctx: Ctx): DefenceFrame {
       const y = d.y + advance(dt, 1.0, 2);
       return finish(d, x, y);
     }
-    // 12 and 13: up under control, drifting in toward the hole the shooter left.
+    // 10 and 13: up under control, folding in toward the hole the shooter left.
     const mark = attacker(ctx, d.number);
-    const fill = clamp((shooterStart.x - d.x) * 0.25, -mx(2), mx(2)) * smooth(dt / 1.5);
-    const x = shoulder(ctx, mark, d.x) + fill;
+    const fill = clamp((shooterStart.x - d.x) * 0.25, -mx(2), mx(2)) * smooth((t - SHOOT_AT) / 1.5);
+    const x = shoulderOf(sc, mark, d.x) + fill;
     const y = Math.min(d.y + advance(dt, 1.4, 5), channelCap(ctx, x, d.y));
-    badges[d.id] = 'FILL';
+    badges[d.id] = t >= SHOOT_AT ? 'FILL' : '';
     return finish(d, x, y);
   });
   return { players, badges, rings };
 }
 
 /**
- * Back-three pendulum, as Rugby Slate draws it: only 11, 15 and 14 (plus 9 sweeping) against the
- * ball. The ball-side winger is up in the line on his touchline; 15 is across behind him; the far
- * winger is deep toward the middle. Everything is a function of how far across the pitch the ball is.
+ * Back-three pendulum, as Rugby Slate draws it: only 11, 15 and 14 against the ball. The ball-side
+ * winger comes up to a stride behind the defensive line on his touchline; 15 is across behind him;
+ * the far winger is deep toward the middle. Everything is a function of how far across the pitch
+ * the ball is, and the three are joined by the pendulum line.
  */
-function pendulumAt(sc: Scenario, t: number, ball: Point): DefenceFrame {
+function pendulumAt(sc: Scenario, ball: Point): DefenceFrame {
   const defence = sc.layout.players.filter((p) => p.team === 'defence');
   const badges: Record<string, string> = {};
   const lineY = sc.defensiveLineY;
@@ -365,10 +559,8 @@ function pendulumAt(sc: Scenario, t: number, ball: Point): DefenceFrame {
   const touchR = BOARD_W - 10;
   const u = clamp((ball.x - touchL) / (touchR - touchL), 0, 1); // 0 = left touchline, 1 = right
   const leftWing = sc.dir === 1 ? 11 : 14; // the blind winger stands on the side the open play is not
-  const nearLine = (v: number) => lerp(lineY, lineY - my(7), smooth(v)); // v = 0 means the ball is on my touchline
-
-  // The ball 0.5 s ago, for the sweeper's lag.
-  const lagged = sc.ballPath ? positionAt(sc.ballPath, Math.max(0, t - 0.5)) : ball;
+  // v = 0: the ball is on my touchline, so I am up, a stride behind the line (never on or over it).
+  const nearLine = (v: number) => lerp(lineY - my(1.5), lineY - my(7), smooth(v));
 
   const players = defence.map((d) => {
     let x = d.x;
@@ -385,15 +577,13 @@ function pendulumAt(sc: Scenario, t: number, ball: Point): DefenceFrame {
       x = lerp(touchL + mx(14), touchR - mx(14), u);
       y = lineY - my(8) - my(6) * (1 - Math.abs(2 * u - 1));
       badges[d.id] = 'ACROSS';
-    } else if (d.number === 9) {
-      x = clamp(lagged.x, touchL + mx(4), touchR - mx(4));
-      y = lineY - my(3);
-      badges[d.id] = 'SWEEP';
     }
     const p = clampPlayer({ x, y });
     return { ...d, x: p.x, y: p.y };
   });
-  return { players, badges, rings: [] };
+  const byX = [...players].sort((a, b) => a.x - b.x);
+  const routes: Route[] = [{ id: 'pendulum', points: byX.map((p) => ({ x: p.x, y: p.y })), color: '#60a5fa', emphasis: true }];
+  return { players, badges, rings: [], routes };
 }
 
 /** Metres the carrier is behind (+) or beyond (−) the gain line at the ruck. */

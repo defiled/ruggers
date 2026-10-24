@@ -77,3 +77,19 @@ Follow-up (same day): the shared 13 unders line now finishes a metre tighter, 20
 than 1.5 : 1. Over/Under re-timed: 10 holds through the 3 Go pass window and *shows* the ball to
 13 at 1.4-1.7 s (`PlayVariant.fakes`, drawn on the timeline as "fake 10 → 13"), then gives to 12
 at 2.1 s; 12 → 15 at 3.1 s, 15 → 14 at 4.0 s, both still under 8 m.
+
+## Addendum: Defence tab pictures (2026-10-23)
+
+- **Drift** is 3 v 5 (9, 10, 12, 13, 14 against 10, 12, 13). On the 10 → 12 pass the whole line
+  pushes one man out together, easing over 1.6 s to the inside shoulder of the new man as he stood
+  when the pass went; the channel cap is now soft (eases in between 3 m and 1.5 m lateral) so
+  nothing snaps. The touchline takes 14. Reference: Rugby Slate Drift-01.
+- **Shooter**: their 12 shoots on the 10 → 12 pass. He comes up with the line, leaves it at 1.0 s
+  as 10's hips turn, sprints at 7.5 m/s and meets 12 as he catches, ~5 m behind the gain line.
+  10 and 13 fold in; 9 covers behind. Reference: Rugby Slate Shooter GIFs.
+- **Pendulum**: 11, 15 and 14 only, joined by the pendulum line, a Defensive Line bar and the ball
+  gliding across in front. The near winger stops 1.5 m behind the line, never on it. No 9.
+  Reference: Rugby Slate Pendulum-01.
+- **Dog-leg**: the late defender is flat-footed (no tracking); from 1.0 s two dashed options are
+  drawn from the runner to the gaps either side of him (INSIDE / OUTSIDE); at 2.2 s he commits
+  inside and goes through. Reference: Rugby Slate Dog-Leg-02 "Slow 10".

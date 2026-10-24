@@ -42,7 +42,7 @@ export const DEFENCE_SYSTEMS: DefenceSystem[] = [
     name: 'Drift',
     tag: 'Up and out, use the touchline',
     summary:
-      'Up and out. The line comes up under control, and as the ball is passed every defender outside it slides one man out: 10\'s marker takes 12, 12\'s takes 13, 13\'s takes 14. The attack\'s extra man is pushed to the touchline, the sixteenth defender who never misses a tackle.',
+      'Up and out. Three defenders against five attackers. The line comes up under control, and each time the ball is passed every defender it has gone past pushes one man out: 10\'s marker takes 12, 12\'s takes 13, 13\'s takes 14. The spare attacker is pushed to the touchline, the defender who never misses a tackle.',
     how: [
       'Close the space first: come up as a line on the trigger, under control. You are not racing to the tackle.',
       'As the ball is passed, push out onto the next receiver. The inside man takes the next attacker out, all the way along the line.',
@@ -90,11 +90,11 @@ export const DEFENCE_SYSTEMS: DefenceSystem[] = [
       'Talk: "mine / yours / push" all the way to the touchline.',
     ],
     captions: [
-      { t: 0, text: 'Set: three defenders against four receivers. Flat line, inside shoulders.' },
+      { t: 0, text: 'Set: three defenders against five attackers. Flat line, inside shoulders.' },
       { t: 0.3, text: 'Up on the trigger, under control: close the space, do not race.' },
-      { t: 1.2, text: 'The ball is passed: everyone pushes out one man. 10\'s marker takes 12, 12\'s takes 13, 13\'s takes 14.' },
-      { t: 2.3, text: 'Nobody has committed early. The numbers are now even and the attack is going sideways.' },
-      { t: 3.2, text: 'Squeezed to the edge: the tackle is made on the touchline, or the touchline makes it.' },
+      { t: 1.2, text: 'Ball past you: push out to the next man. 10\'s marker takes 12.' },
+      { t: 2.1, text: 'Ball past the next man: everyone outside slides with it. Nobody has committed early.' },
+      { t: 3.2, text: 'Squeezed to the edge: 13\'s marker arrives with the ball on 14. Make the tackle, or let the touchline make it.' },
     ],
     source: 'https://rugbyslate.com/defending/the-drift-defence/',
   },
@@ -166,13 +166,13 @@ export const DEFENCE_SYSTEMS: DefenceSystem[] = [
     name: 'Pendulum',
     tag: 'Back three swing with the ball',
     summary:
-      'Only the back three, as Rugby Slate draws it, plus 9 sweeping. Ball on one side: that winger is up in the line marking his man, 15 is across behind him, and the far winger has dropped toward the middle. When the ball goes the other way the whole shape swings with it.',
+      'Only the back three, as Rugby Slate draws it. Ball on one side: that winger is up to the line marking his man, 15 is across behind him, and the far winger has dropped toward the middle. When the ball goes the other way the whole shape swings with it.',
     how: [
       'Ball on your side: come up and join the line to mark their winger.',
       'That leaves the space behind you, where a kick would hurt. 15 shifts across to cover it.',
       'That leaves the middle. The far winger drops back and across to cover it.',
       'Ball goes the other way: swing. The far winger comes up, 15 slides back across, the near winger drops.',
-      '9 shadows the ball just behind the line for the chip and the snipe. If a back-three man is caught in a ruck, 9 or 10 takes his spot.',
+      'If a back-three man is caught in a ruck, 9 or 10 takes his spot in the pendulum.',
     ],
     trigger: 'Where the ball is. Each pass across the field moves the pendulum one step.',
     when: [
@@ -211,8 +211,8 @@ export const DEFENCE_SYSTEMS: DefenceSystem[] = [
       'Never both wingers in the line at the same time unless 15 and 9 are covering.',
     ],
     captions: [
-      { t: 0, text: 'Set: three men cover the whole backfield. 9 sits just behind the line.' },
-      { t: 0.3, text: 'Ball goes open: the open-side winger comes up to mark his man.' },
+      { t: 0, text: 'Set: three men cover the whole backfield, joined by the pendulum.' },
+      { t: 0.3, text: 'Ball goes open: the near winger comes up to a stride behind the line, never through it.' },
       { t: 1.3, text: '15 slides across behind him to cover the kick in behind. The far winger drops toward the middle.' },
       { t: 2.4, text: 'Ball comes back: the pendulum swings. The far winger comes up, 15 goes back across.' },
       { t: 4.0, text: 'Blind winger up, 15 behind him, open winger deep in the middle. Nobody is ever uncovered.' },
@@ -222,17 +222,17 @@ export const DEFENCE_SYSTEMS: DefenceSystem[] = [
   {
     id: 'shooter',
     name: 'Shooter',
-    tag: 'One man shoots the first receiver',
+    tag: '12 shoots on the pass',
     summary:
-      'An aggressive cousin of the blitz. The defender opposite the first receiver breaks out of the line and shoots up to tackle him far behind the gain line. The men either side drift slightly in to fill his channel and 9 lives behind him. Only for an experienced, well-drilled team.',
+      'An aggressive cousin of the blitz. As their 10 passes to 12, our 12 shoots out of the line and hits him as he catches, well behind the gain line. 10 and 13 keep coming and fold in to fill his channel; 9 lives behind him. Only for an experienced, well-drilled team.',
     how: [
-      'Read who the first receiver will be: usually 10, or a forward standing in the pocket. The man opposite him is the shooter.',
-      'The shooter goes early and hard, straight at the receiver, to hit him as he catches.',
-      'The defenders directly either side come up under control and drift slightly in to fill the channel he left.',
+      'Read who the ball is going to next. The man opposite him is the shooter; here it is our 12 reading their 10 → 12 pass.',
+      'The shooter goes as the passer\'s hips turn, hard and straight at the receiver, to hit him as he catches.',
+      'The defenders either side come up under control and fold slightly in to fill the channel he left.',
       '9 sweeps the space behind the shooter for the snipe and the offload.',
       'Everyone else keeps coming forward so the ruck is met on the front foot.',
     ],
-    trigger: 'Ball leaves 9\'s hands; the shooter is already moving.',
+    trigger: 'The passer\'s hips turn: the shooter goes a beat before the ball does.',
     when: [
       'Only for an experienced, well-drilled team that already runs a good blitz.',
       'When the defence is in a strong position and wants to turn pressure into a turnover.',
@@ -266,10 +266,10 @@ export const DEFENCE_SYSTEMS: DefenceSystem[] = [
       '9 lives behind the shooter.',
     ],
     captions: [
-      { t: 0, text: 'Set: 10 is the shooter, opposite the first receiver. 9 sits behind him.' },
-      { t: 0.3, text: 'Trigger: the shooter is already moving, straight at the receiver.' },
-      { t: 1.0, text: 'Either side of him, 12 and 13 come up under control and drift slightly in to fill his channel.' },
-      { t: 1.9, text: 'Hit as he catches, well behind the gain line. The ruck is met on the front foot.' },
+      { t: 0, text: 'Set: a flat line, 9 behind it. Our 12 is the shooter, opposite their 12.' },
+      { t: 0.3, text: '9 to 10. The line comes up under control; the shooter waits for 10\'s hips.' },
+      { t: 1.0, text: 'Their 10 turns to pass: our 12 shoots, straight at their 12.' },
+      { t: 1.9, text: 'Hit as he catches, 5 m behind the gain line. 10 and 13 fold in, 9 covers behind.' },
       { t: 3.0, text: 'Risk: a missed tackle, an offload, or a 9 snipe into the hole behind the shooter.' },
     ],
     source: 'https://rugbyslate.com/defending/shooter-defence/',
@@ -310,8 +310,8 @@ export const DEFENCE_SYSTEMS: DefenceSystem[] = [
     captions: [
       { t: 0, text: 'Set: a flat line, everyone level.' },
       { t: 0.3, text: 'Trigger. The line goes, but the defender opposite 12 is late off the line.' },
-      { t: 1.2, text: 'The men beside him keep coming. The line kinks: a gap opens on each side of the slow man.' },
-      { t: 1.8, text: '10 hits 12 straight into the seam. One late man, one line break.' },
+      { t: 1.2, text: 'The men beside him keep coming. The line kinks: two gaps, inside and outside the slow man.' },
+      { t: 1.8, text: '10 hits 12. He sees both options and takes the inside gap. One late man, one line break.' },
       { t: 3.0, text: 'Even a tackle here is behind the line: the men in front are offside and must retreat. Quick ball for the attack.' },
     ],
     source: 'https://rugbyslate.com/defending/defencive-flat-lines-dog-legs/',

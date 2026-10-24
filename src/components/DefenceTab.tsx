@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react';
-import type { LaneId, OpenSide, PlayerPos } from '../board/types';
+import type { LaneId, OpenSide } from '../board/types';
 import { fmtM } from '../board/constants';
 import { ALIGNMENT_LABEL, DEFENCE_SYSTEMS, PITCH_SECTIONS, READ_THE_ATTACK, type Alignment, type DefenceSystemId } from '../data/defenceSystems';
 import { defaultOpenSide } from '../data/phaseFormation';
 import { LANES } from '../data/scrumSetups';
-import { ballAt, positionAt, type BallState } from '../engine/animate';
-import { DEF_DURATION, buildScenario, defendersAt, gainLineMetres } from '../engine/defenceSim';
+import { DEF_DURATION, buildScenario, gainLineMetres, simulate } from '../engine/defenceSim';
 import { useFeedbackContext } from '../feedback/context';
 import { useBoardOrientation } from '../hooks/useBoardOrientation';
 import { usePlayback } from '../hooks/usePlayback';
@@ -19,7 +18,9 @@ export function DefenceTab() {
   const [alignment, setAlignment] = useState<Alignment>('deep');
   const [lane, setLane] = useState<LaneId>('left15');
   const [openSideOverride, setOpenSideOverride] = useState<OpenSide | null>(null);
-  const playback = usePlayback(DEF_DURATION);
+  // The pendulum has no play to finish, it is a picture of the back three swinging, so it starts itself and runs on repeat.
+  const pendulum = systemId === 'pendulum';
+  const playback = usePlayback(DEF_DURATION, { loop: pendulum, autoplay: pendulum });
 
   const system = DEFENCE_SYSTEMS.find((s) => s.id === systemId) ?? DEFENCE_SYSTEMS[0];
   // On a 5 m lane there is only one side with room for a backline, so the direction is fixed.
@@ -29,25 +30,20 @@ export function DefenceTab() {
   const scenario = useMemo(() => buildScenario(systemId, lane, openSide, alignment), [systemId, lane, openSide, alignment]);
   const t = playback.time;
 
-  const attackers: PlayerPos[] = useMemo(
-    () =>
-      scenario.layout.players
-        .filter((p) => p.team === 'attack')
-        .map((p) => ({ ...p, ...positionAt(scenario.built.routes[p.id], t) })),
-    [scenario, t],
-  );
-  const attackerPoints = useMemo(() => Object.fromEntries(attackers.map((p) => [p.id, { x: p.x, y: p.y }])), [attackers]);
-  const ball: BallState = useMemo(
-    () => (scenario.ballPath ? { pos: positionAt(scenario.ballPath, t), carrier: null, inFlight: false } : ballAt(scenario.built, attackerPoints, t)),
-    [scenario, attackerPoints, t],
-  );
-  const frame = useMemo(() => defendersAt(scenario, t, ball.pos, attackers, ball.carrier), [scenario, t, ball, attackers]);
+  const { attackers, ball, defence: frame } = useMemo(() => simulate(scenario, t), [scenario, t]);
 
   const ballOnly = !!scenario.ballPath; // pendulum: no carriers, so no carrier or gain-line readout
   const carrier = ball.carrier ? attackers.find((a) => a.number === ball.carrier) : null;
   const gain = carrier ? gainLineMetres(scenario, carrier) : null;
-  const caption = [...system.captions].reverse().find((c) => t >= c.t) ?? system.captions[0];
+  const gainText = gain == null ? '—' : gain >= 0 ? `${fmtM(gain)} behind` : `${fmtM(-gain)} over`;
+  const tackle = scenario.tackle;
+  const tackled = !!tackle && t >= tackle.at;
+  const caption = tackled
+    ? { t: tackle.at, text: `Tackle made. Our ${tackle.tackler} wraps their ${tackle.carrier}, ${gainText} the gain line.` }
+    : ([...system.captions].reverse().find((c) => t >= c.t) ?? system.captions[0]);
   const carrierId = ball.carrier ? `attack-${ball.carrier}` : null;
+  // The scrubber only marks passes that happen; nothing goes after the tackle.
+  const passes = scenario.built.variant.passes.filter((p) => !tackle || p.t0 < tackle.at);
 
   const guides: OffsideLine[] = ballOnly
     ? [{ team: 'defence', y: scenario.defensiveLineY, label: 'DEFENSIVE LINE' }]
@@ -57,7 +53,7 @@ export function DefenceTab() {
 
   const select = (id: DefenceSystemId) => {
     setSystemId(id);
-    playback.restart();
+    playback.restart(id === 'pendulum');
   };
 
   const setup = (
@@ -124,21 +120,24 @@ export function DefenceTab() {
             ball={ball.pos}
             ballInFlight={ball.inFlight}
             offsideLines={guides}
+            routes={frame.routes ?? []}
+            markers={frame.markers ?? []}
             highlightIds={carrierId ? [carrierId] : []}
             ringIds={frame.rings}
             badges={frame.badges}
             showReadouts={!mobile}
             portrait={portrait}
+            us="defence"
           />
           <BoardOverlay
             playing={playback.playing}
             time={t}
             duration={DEF_DURATION}
             speed={playback.speed}
-            passes={scenario.built.variant.passes}
+            passes={passes}
             onToggle={playback.toggle}
             onSeek={playback.seek}
-            onRestart={playback.restart}
+            onRestart={() => playback.restart()}
             onSpeed={playback.setSpeed}
           />
         </div>
@@ -153,9 +152,7 @@ export function DefenceTab() {
               </span>
               <span className="stat">
                 <span className="stat__label">Gain line</span>
-                <span className={`stat__value${gain != null && gain < 0 ? ' is-bad' : ''}`}>
-                  {gain == null ? '—' : gain >= 0 ? `${fmtM(gain)} behind` : `${fmtM(-gain)} over`}
-                </span>
+                <span className={`stat__value${gain != null && gain < 0 ? ' is-bad' : ''}`}>{gainText}</span>
               </span>
               <span className="stat">
                 <span className="stat__label">Attack</span>
