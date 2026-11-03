@@ -1,4 +1,4 @@
-/* Frederick RFC Playbook. Mobile-first: base rules are the phone layout, the single
+/* Frederick Rugby Playbook. Mobile-first: base rules are the phone layout, the single
    min-width block below adds the desktop two-column view. Boundary matches MOBILE_QUERY. */
 
 @font-face {
@@ -100,6 +100,12 @@ button {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+}
+
+/* Single section: no bottom tab bar on phones, so nothing reserves room for one.
+   .shell, .foot and .fab all size their bottom spacing from this variable. */
+.app--solo {
+  --tabbar-h: 0px;
 }
 
 /* ---------- Masthead & tabs ---------- */
@@ -1340,5 +1346,226 @@ ol.list {
   *::after {
     transition: none !important;
     animation: none !important;
+  }
+}
+
+/* ---------- Analysis (match clips + comments) ---------- */
+
+.analysis {
+  display: grid;
+  gap: 14px;
+}
+
+.analysis__head {
+  display: grid;
+  gap: 3px;
+}
+
+.analysis__title {
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.analysis__meta {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.cliplist {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clip {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--card);
+}
+
+.clip__title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.clip__frame {
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: #000;
+}
+
+.clip__video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.clip__foot {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.clip__stamp {
+  color: var(--accent-text);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.clip__stamp:hover {
+  border-bottom-color: currentColor;
+}
+
+.clip__stamp--unknown {
+  color: var(--text-3);
+}
+
+.clip__dur {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Comments ---------- */
+
+.clip__comments {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.clip__commentsToggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.clip__commentsToggle:hover {
+  color: var(--text);
+}
+
+.thread {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.thread__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.note {
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+
+.note__head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.note__who {
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.note__when {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.note__body {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.composer {
+  display: grid;
+  gap: 6px;
+}
+
+.composer__who {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.composer__who strong {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.linkbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.linkbtn:hover {
+  color: var(--text);
+}
+
+.composer__actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.composer__note {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+@media (min-width: 821px) {
+  /* These are for watching, so one readable column beats a grid that shrinks them. */
+  .cliplist {
+    max-width: 760px;
+  }
+
+  .clip {
+    padding: 14px;
+  }
+
+  .clip__title {
+    font-size: 15px;
+  }
+
+  .analysis__title {
+    font-size: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Autoplay is suppressed in JS too; this keeps the poster visible meanwhile. */
+  .clip__video {
+    scroll-behavior: auto;
   }
 }

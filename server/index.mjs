@@ -1,6 +1,8 @@
 import express from 'express';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { addComment, listComments, tursoConfigured } from './comments.mjs';
+import { clientIp, nicknameForIp } from './nickname.mjs';
 import { insertFeedback, listFeedback, openDb, resolveFeedback } from './db.mjs';
 
 /**
@@ -66,6 +68,45 @@ app.post('/api/feedback', async (req, res) => {
   console.log(`feedback #${id}${row.name ? ` from ${row.name}` : ''}${row.context ? ` [${row.context}]` : ''}: ${message}`);
   ping({ id, ...row });
   res.status(201).json({ id });
+});
+
+/**
+ * Clip comments for the Analysis tab. Stored in Turso so every visitor sees the same
+ * thread; the client falls back to localStorage when this is unavailable.
+ *   GET  /api/comments?clip=<id>
+ *   POST /api/comments   { clip, nickname, body }
+ */
+app.get('/api/comments', async (req, res) => {
+  if (!tursoConfigured) return res.status(503).json({ error: 'Comments are not configured.' });
+  try {
+    res.json({ comments: await listComments(String(req.query.clip ?? '')) });
+  } catch (err) {
+    console.error('comments list failed:', err.message);
+    res.status(502).json({ error: 'Could not load comments.' });
+  }
+});
+
+/** The commenter's name, fixed by their IP. */
+app.get('/api/nickname', (req, res) => {
+  res.json({ nickname: nicknameForIp(clientIp(req)) });
+});
+
+app.post('/api/comments', async (req, res) => {
+  if (!tursoConfigured) return res.status(503).json({ error: 'Comments are not configured.' });
+  const ip = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  if (throttled(ip)) return res.status(429).json({ error: 'Too many comments, try again in a few minutes.' });
+  try {
+    const comment = await addComment({
+      ...(req.body ?? {}),
+      nickname: nicknameForIp(clientIp(req)),      // server-assigned, not client-chosen
+      userAgent: req.headers['user-agent'],
+    });
+    if (!comment) return res.status(400).json({ error: 'Need a clip id and a message.' });
+    res.status(201).json({ comment });
+  } catch (err) {
+    console.error('comment insert failed:', err.message);
+    res.status(502).json({ error: 'Could not save that.' });
+  }
 });
 
 function requireAdmin(req, res, next) {

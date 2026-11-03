@@ -80,3 +80,12 @@ export function IconClose(p: IconProps) {
     </svg>
   );
 }
+
+export function IconFilm(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M8 5v14M16 5v14M3 12h18" />
+    </svg>
+  );
+}
